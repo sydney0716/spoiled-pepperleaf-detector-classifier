@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Ignore everything by default
+*
+
+# Keep the ignore file itself
+!.gitignore
+
+# Allow only this directory and all its contents
+!spoiled-pepperleaf-detector-classifier/
+!spoiled-pepperleaf-detector-classifier/**
