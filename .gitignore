@@ -215,3 +215,17 @@ __marimo__/
 # Allow only this directory and all its contents
 !spoiled-pepperleaf-detector-classifier/
 !spoiled-pepperleaf-detector-classifier/**
+
+# Raw data
+data/
+weights/
+*.pt
+*.onnx
+*.tflite
+
+# Logs and reports, organization files
+logs/
+reports/
+legacy/
+
+AGENTS.md
