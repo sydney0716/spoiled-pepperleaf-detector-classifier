@@ -26,6 +26,18 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
 
 
+DEFAULT_BATCH_SIZE = 32
+DEFAULT_TRAIN_SPLIT = 0.7
+DEFAULT_VAL_SPLIT = 0.15
+DEFAULT_TEST_SPLIT = 0.15
+DEFAULT_RANDOM_SEED = 42
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_DATA_DIR = PROJECT_ROOT / "data/processed/classification"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "weights/trained"
+DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results/classification"
+
+
 ARCH_CONFIG = {
     "resnet18": {
         "builder": models.resnet18,
@@ -300,19 +312,19 @@ def parse_args():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("/data/processed/classification"),
+        default=DEFAULT_DATA_DIR,
         help="Root directory of the prepared dataset.",
     )
     parser.add_argument(
         "--model-dir",
         type=Path,
-        default=Path("/weights/trained"),
+        default=DEFAULT_MODEL_DIR,
         help="Directory where checkpoints will be saved.",
     )
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path("/results"),
+        default=DEFAULT_RESULTS_DIR,
         help="Directory where training plots will be written.",
     )
     parser.add_argument(
@@ -320,19 +332,6 @@ def parse_args():
         choices=ARCH_CONFIG.keys(),
         default="resnet18",
         help="Which ResNet backbone to fine-tune.",
-    )
-    parser.add_argument("--batch-size", type=int, default=32, help="Mini-batch size.")
-    parser.add_argument(
-        "--train-split", type=float, default=0.7, help="Fraction of data for training."
-    )
-    parser.add_argument(
-        "--val-split", type=float, default=0.15, help="Fraction of data for validation."
-    )
-    parser.add_argument(
-        "--test-split", type=float, default=0.15, help="Fraction of data for testing."
-    )
-    parser.add_argument(
-        "--random-seed", type=int, default=42, help="Seed for reproducibility."
     )
     return parser.parse_args()
 
@@ -354,11 +353,11 @@ def main():
     print("Creating data loaders...")
     train_loader, val_loader, test_loader = create_data_loaders(
         data_dir=args.data_dir,
-        batch_size=args.batch_size,
-        train_split=args.train_split,
-        val_split=args.val_split,
-        test_split=args.test_split,
-        random_seed=args.random_seed,
+        batch_size=DEFAULT_BATCH_SIZE,
+        train_split=DEFAULT_TRAIN_SPLIT,
+        val_split=DEFAULT_VAL_SPLIT,
+        test_split=DEFAULT_TEST_SPLIT,
+        random_seed=DEFAULT_RANDOM_SEED,
     )
 
     print(f"Creating {args.backbone} model...")
