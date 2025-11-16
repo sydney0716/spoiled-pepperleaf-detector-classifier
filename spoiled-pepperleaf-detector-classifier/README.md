@@ -61,5 +61,3 @@ python -m ai.classification.train_resnet --backbone resnet18/resent50
 
 
 
-
-where the fuck is data/interim/detection/labeled_images/yolo11s_labels come from?

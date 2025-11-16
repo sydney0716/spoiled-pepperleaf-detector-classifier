@@ -33,7 +33,7 @@ DEFAULT_TEST_SPLIT = 0.15
 DEFAULT_RANDOM_SEED = 42
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DATA_DIR = PROJECT_ROOT / "data/processed/classification"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "data/classification/classification_processed"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "weights/trained"
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results/classification"
 
@@ -80,25 +80,33 @@ class LeafDataset(Dataset):
 
 
 def get_image_paths_and_labels(data_dir: Path):
-    """Return flattened list of image paths with binary labels."""
-    image_paths = []
-    labels = []
+    """Return image paths and binary labels inferred from the folder structure."""
+    image_root = data_dir / "images"
+    normal_dir = image_root / "normal"
+    spoiled_dir = image_root / "spoiled"
 
-    normal_dir = data_dir / "leaf" / "normal" / "normal"
+    if not image_root.exists():
+        raise FileNotFoundError(f"Missing images directory: {image_root}")
+    if not normal_dir.exists() and not spoiled_dir.exists():
+        raise FileNotFoundError(
+            f"Expected at least one of {normal_dir} or {spoiled_dir} to exist."
+        )
+
+    image_paths: list[str] = []
+    labels: list[int] = []
+    valid_suffixes = {".jpg", ".jpeg", ".png"}
+
     if normal_dir.exists():
-        for img_file in normal_dir.iterdir():
-            if img_file.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                image_paths.append(str(img_file))
+        for img_path in sorted(normal_dir.rglob("*")):
+            if img_path.is_file() and img_path.suffix.lower() in valid_suffixes:
+                image_paths.append(str(img_path))
                 labels.append(0)
 
-    spoiled_dir = data_dir / "leaf" / "spoiled"
     if spoiled_dir.exists():
-        for harm_path in spoiled_dir.iterdir():
-            if harm_path.is_dir():
-                for img_file in harm_path.iterdir():
-                    if img_file.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                        image_paths.append(str(img_file))
-                        labels.append(1)
+        for img_path in sorted(spoiled_dir.rglob("*")):
+            if img_path.is_file() and img_path.suffix.lower() in valid_suffixes:
+                image_paths.append(str(img_path))
+                labels.append(1)
 
     return image_paths, labels
 
@@ -122,6 +130,12 @@ def create_data_loaders(
     print(f"Normal images: {labels.count(0)}")
     print(f"Spoiled images: {labels.count(1)}")
 
+    if not image_paths:
+        raise FileNotFoundError(
+            f"No images found under {data_dir}. Expected layout: "
+            "`images/normal/*.jpg` and `images/spoiled/<disease>/*.jpg`."
+        )
+
     combined = list(zip(image_paths, labels))
     random.shuffle(combined)
     image_paths, labels = zip(*combined)
@@ -142,7 +156,6 @@ def create_data_loaders(
 
     train_transform = transforms.Compose(
         [
-            transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(10),
             transforms.ColorJitter(
@@ -157,7 +170,6 @@ def create_data_loaders(
 
     val_transform = transforms.Compose(
         [
-            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
@@ -170,13 +182,13 @@ def create_data_loaders(
     test_dataset = LeafDataset(test_paths, test_labels, transform=val_transform)
 
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+        val_dataset, batch_size=batch_size, shuffle=False, num_workers=8
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+        test_dataset, batch_size=batch_size, shuffle=False, num_workers=8
     )
 
     return train_loader, val_loader, test_loader
