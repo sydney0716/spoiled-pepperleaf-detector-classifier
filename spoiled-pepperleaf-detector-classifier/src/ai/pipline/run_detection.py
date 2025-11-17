@@ -76,7 +76,9 @@ def main() -> None:
         imgsz=640,
         conf=0.25,
         save=True,
-        save_txt=True,
+        save_txt=False,  # draw boxes only; skip label/score overlays and text exports
+        show_labels=False,
+        show_conf=False,
         exist_ok=True,
     )
 

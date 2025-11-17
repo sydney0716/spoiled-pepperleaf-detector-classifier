@@ -308,7 +308,7 @@ def main() -> None:
             best_weight_path = Path(best_attr)
 
     if best_weight_path and best_weight_path.exists():
-        trained_dir = PROJECT_ROOT / "weights/trained"
+        trained_dir = PROJECT_ROOT / "weights/trained/detection"
         trained_dir.mkdir(parents=True, exist_ok=True)
         weight_name = Path(weights_path).stem
         target_path = trained_dir / f"best_{weight_name}.pt"

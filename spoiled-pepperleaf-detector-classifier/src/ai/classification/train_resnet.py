@@ -35,7 +35,7 @@ DEFAULT_RANDOM_SEED = 42
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data/classification/classification_processed"
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "weights/trained"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "weights/trained/classification"
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results/classification"
 
 
