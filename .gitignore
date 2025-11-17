@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+*.cpy
 
 # C extensions
 *.so
@@ -230,3 +231,4 @@ legacy/
 
 AGENTS.md
 .for_paper/
+.splits/

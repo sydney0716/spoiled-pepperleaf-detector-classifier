@@ -22,6 +22,7 @@ import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
 from sklearn.metrics import classification_report, confusion_matrix
+from tqdm.auto import tqdm
 from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
 
@@ -50,8 +51,8 @@ ARCH_CONFIG = {
     "resnet50": {
         "builder": models.resnet50,
         "hidden_features": 512,
-        "num_epochs": 100,
-        "patience": 10,
+        "num_epochs": 150,
+        "patience": 15,
         "model_filename": "leaf_classifier_resnet50.pth",
         "plot_prefix": "leaf_resnet50",
     },
@@ -195,7 +196,6 @@ def create_data_loaders(
 
 
 def create_model(backbone: str, num_classes: int = 2, pretrained: bool = True):
-    """Create the requested ResNet backbone with a custom classifier head."""
     if backbone not in ARCH_CONFIG:
         raise ValueError(f"Unsupported backbone '{backbone}'")
 
@@ -225,7 +225,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     correct = 0
     total = 0
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    progress_bar = tqdm(train_loader, desc="Train", leave=False)
+    for batch_idx, (data, target) in enumerate(progress_bar):
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
@@ -239,8 +240,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         total += target.size(0)
         correct += (predicted == target).sum().item()
 
-        if batch_idx % 50 == 0:
-            print(f"Batch {batch_idx}/{len(train_loader)}, Loss: {loss.item():.4f}")
+        if total > 0:
+            progress_bar.set_postfix(
+                loss=loss.item(), acc=f"{100.0 * correct / total:.2f}%"
+            )
 
     epoch_loss = running_loss / len(train_loader)
     epoch_acc = 100.0 * correct / total
@@ -256,7 +259,8 @@ def validate_epoch(model, val_loader, criterion, device):
     all_targets = []
 
     with torch.no_grad():
-        for data, target in val_loader:
+        progress_bar = tqdm(val_loader, desc="Val", leave=False)
+        for data, target in progress_bar:
             data, target = data.to(device), target.to(device)
             output = model(data)
             loss = criterion(output, target)
@@ -268,6 +272,11 @@ def validate_epoch(model, val_loader, criterion, device):
 
             all_predictions.extend(predicted.cpu().numpy())
             all_targets.extend(target.cpu().numpy())
+
+            if total > 0:
+                progress_bar.set_postfix(
+                    loss=loss.item(), acc=f"{100.0 * correct / total:.2f}%"
+                )
 
     epoch_loss = running_loss / len(val_loader)
     epoch_acc = 100.0 * correct / total
