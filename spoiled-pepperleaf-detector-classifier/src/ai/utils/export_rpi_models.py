@@ -4,7 +4,7 @@ Convert trained pepper leaf models into Raspberry Pi ready artifacts.
 
 The script searches the training output folders for YOLO detection weights
 (`*.pt`) and ResNet classification checkpoints (`*.pth`) and exports them to
-ONNX for Raspberry Pi deployment. All outputs land in `weights/exported`
+TFLite for Raspberry Pi deployment. All outputs land in `weights/exported`
 (override with `--export-dir` for classification exports).
 """
 
@@ -13,6 +13,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import shutil
+import subprocess
+import sys
+import tempfile
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -93,13 +96,13 @@ def list_weight_files(directory: Path, suffix: str) -> List[Path]:
 
 
 def export_detection_model(weights_path: Path, export_dir: Path) -> List[Path]:
-    """Export a YOLO checkpoint to ONNX."""
+    """Export a YOLO checkpoint to TFLite."""
     YOLOCls = load_ultralytics()
     model = YOLOCls(str(weights_path))
-    run_name = f"{weights_path.stem}_onnx"
-    print(f"[DETECTION] Exporting {weights_path.name} -> ONNX")
+    run_name = f"{weights_path.stem}_tflite"
+    print(f"[DETECTION] Exporting {weights_path.name} -> TFLite")
     result = model.export(
-        format="onnx",
+        format="tflite",
         imgsz=640,
         dynamic=False,
         simplify=True,
@@ -110,15 +113,15 @@ def export_detection_model(weights_path: Path, export_dir: Path) -> List[Path]:
     if result is None:
         print(f"  ! Exporter did not return a path for {run_name}")
         return []
-    onnx_path = Path(result).resolve()
+    tflite_path = Path(result).resolve()
     export_dir.mkdir(parents=True, exist_ok=True)
-    target_path = export_dir / f"{weights_path.stem}.onnx"
-    if onnx_path != target_path:
+    target_path = export_dir / f"{weights_path.stem}.tflite"
+    if tflite_path != target_path:
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(onnx_path), target_path)
-        onnx_path = target_path
-    print(f"  ✓ Saved {onnx_path}")
-    return [onnx_path]
+        shutil.move(str(tflite_path), target_path)
+        tflite_path = target_path
+    print(f"  ✓ Saved {tflite_path}")
+    return [tflite_path]
 
 
 def load_classifier(weights_path: Path) -> tuple[torch.nn.Module, str]:
@@ -136,23 +139,66 @@ def export_classifier_artifacts(
     base_name: str,
     export_dir: Path,
 ) -> Dict[str, Optional[Path]]:
+    """Export a classifer to TFLite via an intermediate ONNX model."""
     export_dir.mkdir(parents=True, exist_ok=True)
-    outputs: Dict[str, Optional[Path]] = {}
+    outputs: Dict[str, Optional[Path]] = {"tflite": None}
     dummy = torch.randn(1, 3, 224, 224)
 
-    onnx_path = export_dir / f"{base_name}.onnx"
-    print(f"[CLASSIFICATION] Exporting ONNX -> {onnx_path.name}")
-    with torch.inference_mode():
-        torch.onnx.export(
-            model,
-            dummy,
-            onnx_path,
-            input_names=["images"],
-            output_names=["logits"],
-            opset_version=13,
-            dynamic_axes={"images": {0: "batch"}, "logits": {0: "batch"}},
-        )
-    outputs["onnx"] = onnx_path
+    # We need to use a temporary directory for all intermediate artifacts.
+    # This prevents us from polluting the export directory.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        tmp_onnx_path = tmpdir_path / f"{base_name}.onnx"
+        with torch.inference_mode():
+            torch.onnx.export(
+                model,
+                dummy,
+                str(tmp_onnx_path),
+                input_names=["images"],
+                output_names=["logits"],
+                opset_version=13,
+                dynamic_axes={"images": {0: "batch"}, "logits": {0: "batch"}},
+            )
+
+        tflite_path = export_dir / f"{base_name}.tflite"
+        print(f"[CLASSIFICATION] Exporting TFLite -> {tflite_path.name}")
+
+        try:
+            import tensorflow as tf
+
+            # 1. Convert ONNX to TF SavedModel using onnx2tf CLI
+            tf_model_path = tmpdir_path / "tf_model"
+            cmd = [
+                sys.executable,
+                "-m",
+                "onnx2tf",
+                "-i",
+                str(tmp_onnx_path),
+                "-o",
+                str(tf_model_path),
+                "-b",
+                "1",  # Set batch size to 1 for compatibility
+                "--non_verbose",
+            ]
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"  ! onnx2tf conversion failed: {result.stderr}")
+                return outputs
+
+            # 2. Convert TF SavedModel to TFLite
+            converter = tf.lite.TFLiteConverter.from_saved_model(str(tf_model_path))
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            tflite_model = converter.convert()
+            with open(tflite_path, "wb") as f:
+                f.write(tflite_model)
+            outputs["tflite"] = tflite_path
+            print(f"  ✓ Saved {tflite_path}")
+
+        except ImportError:
+            print("  ! Skipping TFLite export: tensorflow is not installed.")
+        except Exception as e:
+            print(f"  ! Failed to convert to TFLite: {e}")
+
     return outputs
 
 
@@ -193,7 +239,7 @@ def run() -> None:
                 print(f"[DETECTION] Skipping {weight_path.name}: {exc}")
                 continue
             detection_results.append(
-                {f"onnx_{idx}": path for idx, path in enumerate(written_paths)}
+                {f"tflite_{idx}": path for idx, path in enumerate(written_paths)}
             )
     else:
         print(f"[INFO] No detection checkpoints (*.pt) found in {detection_dir}")
