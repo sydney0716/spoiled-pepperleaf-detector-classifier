@@ -60,4 +60,4 @@ run train_resent.py
 python -m ai.classification.train_resnet --backbone resnet18/resent50
 
 
-
+https://drive.google.com/drive/folders/13yicLG0txS0S_t1Iuv7l6Hv6CP9FztPP?usp=sharing, https://drive.google.com/drive/folders/1f9iVxkEr4StjCiHqpBWel3KNPRaKmPYh?usp=sharing, https://drive.google.com/drive/folders/1hWj7vHHJ99N5xNc6RJw6zf0Ag-FXeOsf?usp=sharing
