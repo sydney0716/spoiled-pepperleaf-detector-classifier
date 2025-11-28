@@ -31,11 +31,6 @@ def _box_label_boxes_only(
     color: tuple = (128, 128, 128),
     txt_color: tuple = (255, 255, 255),
 ):
-    """
-    Wrapper around the original Annotator.box_label that always draws an empty
-    label string. This keeps the bounding boxes but removes the class text on
-    all images that use Annotator (including train/val mosaics).
-    """
     return _OriginalBoxLabel(self, box, label="", color=color, txt_color=txt_color)
 
 
@@ -68,16 +63,12 @@ WEIGHT_CHOICES = {
 }
 DEFAULT_WEIGHT_NAME = "yolo8n"
 
-
 def build_dataset_yaml(
     dataset_root: Path,
     output_dir: Path,
     class_name: str,
     yaml_name: Optional[str] = None,
 ) -> Path:
-    """
-    Build a minimal YOLO dataset YAML file pointing to a split dataset.
-    """
     dataset_root = dataset_root.resolve()
     yaml_name = yaml_name or f"{dataset_root.name}.yaml"
     yaml_path = output_dir / yaml_name
@@ -111,7 +102,6 @@ def build_dataset_yaml(
 
 
 def list_image_files(image_dir: Path) -> Sequence[Path]:
-    """Return image files in a directory sorted by name."""
     valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
     return sorted([p for p in image_dir.iterdir() if p.suffix.lower() in valid_exts])
 
