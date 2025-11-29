@@ -1,22 +1,9 @@
-#!/usr/bin/env python3
-"""
-Evaluate Grounding DINO on the pepper-leaf validation split using COCO metrics.
-
-This script:
-1. Loads the YOLO auto-split dataset under detection_yolo/.splits/src_split_v20_s42.
-2. Runs Grounding DINO with the caption "a green leaf" on every validation image.
-3. Saves predictions in COCO JSON format.
-4. Computes mAP with pycocotools against the converted COCO ground truth.
-
-Adjust constants below if your paths differ.
-"""
-
 from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 import pandas as pd
@@ -27,31 +14,117 @@ from torchvision.ops import box_convert
 import groundingdino
 from groundingdino.util.inference import load_image, load_model, predict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-# --------------------------------------------------------------------------- #
-# Configuration
-# --------------------------------------------------------------------------- #
-DATASET_ROOT = Path("detection_yolo/.splits/src_split_v20_s42").resolve()
-GROUND_TRUTH_JSON = DATASET_ROOT / "annotations/src_split_v20_s42_val.json"
-PREDICTIONS_JSON = DATASET_ROOT / "annotations/grounding_dino_val_predictions.json"
-METRICS_CSV = DATASET_ROOT / "annotations/grounding_dino_val_metrics.csv"
+DATASET_ROOT = PROJECT_ROOT / "data/detection_processed"
 
-# Use the Swin-T config that ships with the pip package.
-CONFIG_PATH = (
-    Path(groundingdino.__file__).resolve().parent / "config" / "GroundingDINO_SwinT_OGC.py"
-)
-# Update this if your checkpoint lives elsewhere.
-CHECKPOINT_PATH = Path("/home/sydney0716/Desktop/AI/models/groundingdino_swint_ogc.pth")
+IMAGES_VAL_DIR = DATASET_ROOT / "images/val"
+LABELS_VAL_DIR = DATASET_ROOT / "labels/val"
+
+OUTPUT_DIR = PROJECT_ROOT / "results/detection/grounding_dino"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+GROUND_TRUTH_JSON = OUTPUT_DIR / "val_ground_truth.json"
+PREDICTIONS_JSON = OUTPUT_DIR / "val_predictions.json"
+METRICS_CSV = OUTPUT_DIR / "val_metrics.csv"
+
+# Model configuration
+CONFIG_PATH = PROJECT_ROOT / "models/pretrained/GroundingDINO_SwinT_OGC.py"
+CHECKPOINT_PATH = PROJECT_ROOT / "models/pretrained/groundingdino_swint_ogc.pth"
 
 PROMPT = "a green leaf"
-BOX_THRESHOLD = 0.35
-TEXT_THRESHOLD = 0.25
+BOX_THRESHOLD = 0.15
+TEXT_THRESHOLD = 0.15
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
+def parse_yolo_label(label_path: Path, img_width: int, img_height: int) -> List[List[float]]:
+    if not label_path.exists():
+        return []
+
+    boxes = []
+    with label_path.open("r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) != 5:
+                continue
+            
+            # We assume class_id is 0 (or ignored since we only have one class for now)
+            # _, x_c, y_c, w_n, h_n = parts
+            x_c = float(parts[1])
+            y_c = float(parts[2])
+            w_n = float(parts[3])
+            h_n = float(parts[4])
+
+            # Convert normalized center (x_c, y_c, w_n, h_n) to absolute (x_min, y_min, w, h)
+            w = w_n * img_width
+            h = h_n * img_height
+            x_min = (x_c * img_width) - (w / 2)
+            y_min = (y_c * img_height) - (h / 2)
+
+            boxes.append([x_min, y_min, w, h])
+    return boxes
+
+
+def create_coco_ground_truth_from_yolo() -> None:
+    print(f"[INFO] Generating COCO ground truth JSON from {LABELS_VAL_DIR}...")
+    
+    images = []
+    annotations = []
+    categories = [{"id": 1, "name": "leaf"}]
+    
+    ann_id_counter = 1
+    img_id_counter = 1
+    
+    # Collect all valid image files
+    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+    image_files = sorted([p for p in IMAGES_VAL_DIR.iterdir() if p.suffix.lower() in valid_exts])
+
+    if not image_files:
+        raise FileNotFoundError(f"No images found in {IMAGES_VAL_DIR}")
+
+    for img_path in image_files:
+        # Load image to get dimensions
+        # We use load_image from groundingdino utils which returns (image_source, image)
+        # image_source is a numpy array (H, W, 3)
+        image_source, _ = load_image(str(img_path))
+        h, w, _ = image_source.shape
+        
+        image_info = {
+            "id": img_id_counter,
+            "file_name": img_path.name,
+            "width": w,
+            "height": h
+        }
+        images.append(image_info)
+
+        # Look for corresponding label file
+        label_path = LABELS_VAL_DIR / f"{img_path.stem}.txt"
+        boxes = parse_yolo_label(label_path, w, h)
+        
+        for box in boxes:
+            annotations.append({
+                "id": ann_id_counter,
+                "image_id": img_id_counter,
+                "category_id": 1,
+                "bbox": box,
+                "area": box[2] * box[3],
+                "iscrowd": 0
+            })
+            ann_id_counter += 1
+            
+        img_id_counter += 1
+
+    coco_output = {
+        "images": images,
+        "annotations": annotations,
+        "categories": categories
+    }
+    
+    GROUND_TRUTH_JSON.write_text(json.dumps(coco_output, indent=2))
+    print(f"[OK] Saved temporary ground truth to {GROUND_TRUTH_JSON}")
+
+
 def load_image_id_lookup(gt_json: Path) -> Dict[str, int]:
     data = json.loads(gt_json.read_text())
     return {entry["file_name"]: entry["id"] for entry in data["images"]}
@@ -61,6 +134,7 @@ def generate_predictions() -> List[dict]:
     if not CHECKPOINT_PATH.exists():
         raise FileNotFoundError(f"Checkpoint not found: {CHECKPOINT_PATH}")
 
+    print(f"[INFO] Loading model from {CHECKPOINT_PATH}...")
     model = load_model(str(CONFIG_PATH), str(CHECKPOINT_PATH), device=DEVICE)
     model = model.to(DEVICE)
     model.eval()
@@ -68,20 +142,19 @@ def generate_predictions() -> List[dict]:
     gt_lookup = load_image_id_lookup(GROUND_TRUTH_JSON)
     predictions: List[dict] = []
 
-    image_dir = DATASET_ROOT / "images" / "val"
-    label_missing: List[str] = []
+    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+    image_files = sorted([p for p in IMAGES_VAL_DIR.iterdir() if p.suffix.lower() in valid_exts])
 
-    for image_path in sorted(image_dir.glob("*")):
-        if image_path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}:
-            continue
+    print(f"[INFO] Running inference on {len(image_files)} images...")
 
-        rel_path = str(image_path.relative_to(DATASET_ROOT))
-        image_id = gt_lookup.get(rel_path)
+    for image_path in image_files:
+        image_id = gt_lookup.get(image_path.name)
         if image_id is None:
-            label_missing.append(rel_path)
             continue
 
         image_np, image_transformed = load_image(str(image_path))
+        
+        # Predict
         boxes, scores, _phrases = predict(
             model=model,
             image=image_transformed,
@@ -97,6 +170,7 @@ def generate_predictions() -> List[dict]:
         height, width = image_np.shape[:2]
         scale = torch.tensor([width, height, width, height], dtype=boxes.dtype)
         boxes_scaled = boxes * scale
+        # Convert from cxcywh to xywh (COCO format)
         boxes_xywh = box_convert(boxes_scaled, in_fmt="cxcywh", out_fmt="xywh")
 
         for xywh, score in zip(boxes_xywh, scores):
@@ -109,18 +183,16 @@ def generate_predictions() -> List[dict]:
                 }
             )
 
-    if label_missing:
-        print(f"[WARN] Skipped {len(label_missing)} image(s) missing in ground truth JSON: {label_missing[:5]}")
-
-    PREDICTIONS_JSON.parent.mkdir(parents=True, exist_ok=True)
     PREDICTIONS_JSON.write_text(json.dumps(predictions, indent=2))
     print(f"[OK] Saved predictions to {PREDICTIONS_JSON}")
     return predictions
 
 
 def evaluate_predictions() -> Dict[str, float]:
+    print("[INFO] Evaluating predictions...")
     coco_gt = COCO(str(GROUND_TRUTH_JSON))
     coco_dt = coco_gt.loadRes(str(PREDICTIONS_JSON))
+    
     evaluator = COCOeval(coco_gt, coco_dt, iouType="bbox")
     evaluator.evaluate()
     evaluator.accumulate()
@@ -143,17 +215,22 @@ def evaluate_predictions() -> Dict[str, float]:
         "AR_large": stats[11],
     }
     df = pd.DataFrame([metrics])
-    METRICS_CSV.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(METRICS_CSV, index=False)
     print(f"[OK] Wrote metrics to {METRICS_CSV}")
     return metrics
-
 
 def main() -> None:
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if DEVICE == "cpu":
         print("[INFO] CUDA not available. Running Grounding DINO on CPU (slower).")
+    
+    # 1. Convert YOLO labels to COCO JSON for evaluation ground truth
+    create_coco_ground_truth_from_yolo()
+    
+    # 2. Run inference
     generate_predictions()
+    
+    # 3. Evaluate
     evaluate_predictions()
 
 

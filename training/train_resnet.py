@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import time
 from datetime import timedelta
@@ -18,7 +19,6 @@ from tqdm.auto import tqdm
 from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
 
-
 DEFAULT_BATCH_SIZE = 32
 DEFAULT_TRAIN_SPLIT = 0.7
 DEFAULT_VAL_SPLIT = 0.15
@@ -29,7 +29,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data/classification_processed"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "models/trained"
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results"
-
 
 ARCH_CONFIG = {
     "resnet18": {
@@ -49,7 +48,6 @@ ARCH_CONFIG = {
         "plot_prefix": "leaf_resnet50",
     },
 }
-
 
 class LeafDataset(Dataset):
 
@@ -483,6 +481,25 @@ def main():
     plot_confusion_matrix(
         test_targets, test_preds, results_dir / f"{plot_prefix}_confusion_matrix_test.png"
     )
+    
+    # Save numerical results to JSON
+    cm_val = confusion_matrix(val_targets, val_preds)
+    results_data = {
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "train_accs": train_accs,
+        "val_accs": val_accs,
+        "best_val_acc": best_val_acc,
+        "test_acc": test_acc,
+        "test_loss": test_loss,
+        "confusion_matrix_val": cm_val.tolist(), # Convert numpy array to list
+        "confusion_matrix_test": confusion_matrix(test_targets, test_preds).tolist()
+    }
+    
+    json_save_path = results_dir / "result.json"
+    with open(json_save_path, "w") as f:
+        json.dump(results_data, f, indent=4)
+    print(f"Numerical results saved to: {json_save_path}")
 
     total_training_time = time.time() - training_start_time
 

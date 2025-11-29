@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-Summarize detection metrics for YOLO runs and Grounding DINO into a single CSV.
-
-Outputs runs/model_comparison.csv with columns:
-model, best_epoch, mAP50-95, mAP50, precision, recall
-"""
-
 from __future__ import annotations
 
 import csv
@@ -17,21 +9,18 @@ import numpy as np
 import pandas as pd
 
 
-RUNS_DIR = Path("runs")
+RESULTS_DIR = Path("results/detection")
 YOLO_RUNS: Dict[str, Path] = {
-    "YOLOv8n": RUNS_DIR / "yolov8n" / "results.csv",
-    "YOLOv8s": RUNS_DIR / "yolov8s" / "results.csv",
-    "YOLOv11n": RUNS_DIR / "yolov11n" / "results.csv",
-    "YOLOv11s": RUNS_DIR / "yolov11s" / "results.csv",
+    "YOLOv8n": RESULTS_DIR / "yolov8n" / "results.csv",
+    "YOLOv8s": RESULTS_DIR / "yolov8s" / "results.csv",
+    "YOLOv11n": RESULTS_DIR / "yolov11n" / "results.csv",
+    "YOLOv11s": RESULTS_DIR / "yolov11s" / "results.csv",
 }
 
-DINO_METRICS = [
-    Path("runs/grounding_dino_val_metrics.csv"),
-    Path("detection_yolo/.splits/src_split_v20_s42/annotations/grounding_dino_val_metrics.csv"),
-]
+DINO_METRICS = RESULTS_DIR / "grounding_dino" / "val_metrics.csv"
 
-OUTPUT_CSV = RUNS_DIR / "model_comparison.csv"
-OUTPUT_FIG = RUNS_DIR / "model_comparison.png"
+OUTPUT_CSV = RESULTS_DIR / "comparison" / "model_comparison.csv"
+OUTPUT_FIG = RESULTS_DIR / "comparison" / "model_comparison.png"
 
 
 def load_best_row(csv_path: Path) -> Optional[pd.Series]:
