@@ -215,10 +215,6 @@ __marimo__/
 # Keep the ignore file itself
 !.gitignore
 
-# Allow only this directory and all its contents
-!spoiled-pepperleaf-detector-classifier/
-!spoiled-pepperleaf-detector-classifier/**
-
 # Raw data
 data/
 weights/
