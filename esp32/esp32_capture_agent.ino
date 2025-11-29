@@ -4,17 +4,17 @@
 #include <PubSubClient.h>
 #include "esp_heap_caps.h"
 
-// ===== WiFi =====
-const char* WIFI_SSID = "useYourWifi";
-const char* WIFI_PASS = "useYourPassword";
-const char* SERVER_HOST = "192.168.195.196"; // Example
+// WiFi Configuration
+const char* WIFI_SSID = "USE_YOUR_WIFI_SSID";
+const char* WIFI_PASS = "USE_YOUR_WIFI_PASSWORD";
+const char* SERVER_HOST = "USE_RASPBERRY_PI_IP";
 const int SERVER_PORT = 5000;
 
-// ===== MQTT =====
-const char* MQTT_BROKER = "192.168.195.196";  // Example
+// MQTT Configuration
+const char* MQTT_BROKER = "USE_RASPBERRY_PI_IP";
 const int MQTT_PORT = 1883;
 
-const char* ESP32_ID = "10";  // Example
+const char* ESP32_ID = "10";  // Unique ESP32 device ID
 const char* CAPTURE_TOPIC = "farm/capture";
 char ALERT_TOPIC[32];
 char NEARBY_TOPIC[32];
@@ -23,6 +23,7 @@ char CLEAR_TOPIC[32];
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
+// Camera Pin Configuration
 #define CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -42,23 +43,16 @@ PubSubClient mqttClient(espClient);
 #define PCLK_GPIO_NUM     22
 #define FLASH_LED_GPIO     4
 
-// LED PIN
+// LED Pin Configuration
 #define RED_LED_GPIO      12
 #define GREEN_LED_GPIO    13
 
-#define CAPTURE_INTERVAL_MS 5000
-
-// LED Config
 #define LED_CHANNEL_R 1
 #define LED_CHANNEL_G 2
 const int PWM_FREQ = 5000;
-const int PWM_RESOLUTION = 8; // 최소 8비트 이상
+const int PWM_RESOLUTION = 8; // 8-bit resolution
 
-ledcAttach(RED_LED_GPIO, PWM_FREQ, PWM_RESOLUTION);
-ledcAttach(GREEN_LED_GPIO, PWM_FREQ, PWM_RESOLUTION);
-
-// (CA 타입 -> CA라 255 or 256가 OFF / 0이 ON)
-
+// LED Control Helpers
 void setRed() { 
     ledcWrite(RED_LED_GPIO, 0); 
     ledcWrite(GREEN_LED_GPIO, 256);
@@ -82,9 +76,10 @@ void setYellow() {
 void setOff() {
     ledcWrite(RED_LED_GPIO, 256); 
     ledcWrite(GREEN_LED_GPIO, 256);
-}    
+}
 
-// ===== Camera init =====
+
+// Camera initialization
 bool initCamera() {
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
@@ -121,7 +116,7 @@ bool initCamera() {
     return esp_camera_init(&config) == ESP_OK;
 }
 
-// ===== WiFi =====
+// Wifi Connection
 void connectWiFi() {
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -129,17 +124,18 @@ void connectWiFi() {
         delay(500);
         Serial.print(".");
     }
-    Serial.printf("\nWiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("\nWiFi connected, IP: %s\n", 
+        WiFi.localIP().toString().c_str());
 }
 
-// ===== JPEG HTTP 전송 =====
+// HTTP JPEG Upload
 bool postJpeg(const uint8_t* buf, size_t len) {
     WiFiClient client;
+
     if(!client.connect(SERVER_HOST, SERVER_PORT)) {
-      // HTTP 서버 연결 실패
-      setYellow();
-      Serial.println("[HTTP] Connection failed.");
-      return false;
+        Serial.println("[HTTP] Connection failed.");
+        setYellow();
+        return false;
     }
     client.printf("POST /upload HTTP/1.1\r\n");
     client.printf("Host: %s\r\n", SERVER_HOST);
@@ -152,16 +148,15 @@ bool postJpeg(const uint8_t* buf, size_t len) {
     client.flush();
     
     if (written != len) {
-        // 데이터 전송 실패
         Serial.printf("[HTTP] Incomplete data sent: %d of %d\n", written, len);
         client.stop();
         setYellow();
         return false;
     }
 
-
+    // Read response
     String resp;
-    uint32_t start = millis();
+    uint32_t start = millis();                        
     while(millis()-start < 8000){
         while(client.available()) resp += char(client.read());
         if(!client.connected()) break;
@@ -170,19 +165,18 @@ bool postJpeg(const uint8_t* buf, size_t len) {
     client.stop();
 
     if (resp.indexOf("200 OK") > 0) {
-        setLEDByState(); // 성공: LED 상태를 현재 currentState(ALERT/NEARBY/CLEAR)에 맞게 복구
         Serial.println("[HTTP] Upload success (200 OK).");
+        setLEDByState();
         return true;
     }
 
-    // 실패: 실패 상태(Yellow)를 표시하고, 이전 경고 상태를 복원하지 않습니다.
     Serial.printf("[HTTP] Upload failed. Response: %s\n", resp.c_str());
     setYellow(); 
     return false;
 }
 
-// ===== LED 상태 관리 =====
-String currentState = "CLEAR"; // 기본 상태
+// LED State Handler
+String currentState = "CLEAR";
 
 void setLEDByState() {
     if(currentState == "ALERT") setRed();
@@ -190,49 +184,51 @@ void setLEDByState() {
     else setGreen();
 }
 
-// ===== MQTT Callback =====
+// MQTT Callback
 void callback(char* topic, byte* payload, unsigned int length){
-    String received_topic = String(topic);
+    String received = String(topic);
 
-    if(received_topic.startsWith("farm/alert/")){
+    if(received.startsWith("farm/alert/")){
         currentState = "ALERT";
         setLEDByState();
         Serial.println("[MQTT] ALERT received");
     }
-    else if(received_topic.startsWith("farm/nearby/")){
+    else if(received.startsWith("farm/nearby/")){
         currentState = "NEARBY";
         setLEDByState();
         Serial.println("[MQTT] NEARBY received");
     }
-    else if(received_topic.startsWith("farm/clear/")){
+    else if(received.startsWith("farm/clear/")){
         currentState = "CLEAR";
         setLEDByState();
         Serial.println("[MQTT] CLEAR received");
     }
 
-    if(received_topic == CAPTURE_TOPIC){
-        Serial.println("[Capture] Taking photo...");
+    // Capture instruction
+    if(received == CAPTURE_TOPIC){
+        Serial.println("[Capture] Capturing Image");
+
         camera_fb_t* fb = esp_camera_fb_get();
         if(fb){
             if(!postJpeg(fb->buf, fb->len)){
-                Serial.println("[Capture] Post failed.");
+                Serial.println("[Capture] Upload failed.");
             }
             esp_camera_fb_return(fb);
         } else {
-            Serial.println("[Capture] Camera capture failed!");
+            Serial.println("[Capture] Camera capture failed.");
             setYellow();
         }
     }
 }
 
 
-// ===== MQTT 연결 =====
+// MQTT Connection
 void connectMQTT(){
     while(!mqttClient.connected()){
-        Serial.print("Attempting MQTT connection...");
+        Serial.print("Attempting MQTT connection");
+
         if(mqttClient.connect(ESP32_ID)){
-            Serial.println("connected");
-            
+            Serial.println("MQTT Connected");
             snprintf(ALERT_TOPIC,sizeof(ALERT_TOPIC),"farm/alert/%s",ESP32_ID);
             snprintf(NEARBY_TOPIC,sizeof(NEARBY_TOPIC),"farm/nearby/%s",ESP32_ID);
             snprintf(CLEAR_TOPIC,sizeof(CLEAR_TOPIC),"farm/clear/%s",ESP32_ID);
@@ -242,40 +238,43 @@ void connectMQTT(){
             mqttClient.subscribe(CLEAR_TOPIC);
             mqttClient.subscribe(CAPTURE_TOPIC);
 
-            Serial.printf("Subscribed to: %s, %s, %s, %s\n", ALERT_TOPIC, NEARBY_TOPIC, CLEAR_TOPIC, CAPTURE_TOPIC);
-
         } else {
             Serial.print("failed, rc=");
             Serial.print(mqttClient.state());
-            Serial.println(" retrying in 1 second");
             delay(1000);
         }
     }
 }
 
-// ===== Setup =====
+// Setup
 void setup(){
     Serial.begin(115200);
 
-    pinMode(FLASH_LED_GPIO,OUTPUT);
-    digitalWrite(FLASH_LED_GPIO,LOW);
+    pinMode(FLASH_LED_GPIO, OUTPUT);
+    digitalWrite(FLASH_LED_GPIO, LOW);
     
-    // LED 채널 연결 (SD 핀 충돌 방지 문제에서 자유로워짐)
-    ledcAttachChannel(RED_LED_GPIO, PWM_FREQ, PWM_RESOLUTION, LED_CHANNEL_R);
-    ledcAttachChannel(GREEN_LED_GPIO, PWM_FREQ, PWM_RESOLUTION, LED_CHANNEL_G);
+    if (!ledcAttach(RED_LED_GPIO, PWM_FREQ, PWM_RESOLUTION)) {
+        Serial.println("Red LED Attach Failed");
+    }
+    if (!ledcAttach(GREEN_LED_GPIO, PWM_FREQ, PWM_RESOLUTION)) {
+        Serial.println("Green LED Attach Failed");
+    }
 
     setOff();
 
     connectWiFi();
     setGreen();
 
-    mqttClient.setServer(MQTT_BROKER,MQTT_PORT);
+    mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(callback);
 
-    if(!initCamera()){ Serial.println("Camera init failed"); ESP.restart(); }
+    if(!initCamera()) {
+        Serial.println("Camera init failed");
+        ESP.restart();
+    }
 }
 
-// ===== Loop =====
+// Loop
 void loop(){
     if(!mqttClient.connected()) connectMQTT();
     mqttClient.loop();

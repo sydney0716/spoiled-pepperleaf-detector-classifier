@@ -2,10 +2,16 @@ import cv2
 import numpy as np
 import tflite_runtime.interpreter as tflite
 
-# ------------------------
-# 1. Load Models (YOLO + ResNet18)
-# ------------------------
 def load_models():
+    """
+    Load YOLOv8 detector and ResNet-18 classifier.
+
+    Returns:
+        A tuple containing:
+            - YOLO interpreter and its input/output details
+            - Resnet interpreter and its input/output details
+            - Label list
+    """
     detect_interpreter = tflite.Interpreter(model_path="/home/hoyoungchung/Desktop/yolo_float16.tflite")
     detect_interpreter.allocate_tensors()
     detect_input_details = detect_interpreter.get_input_details()
@@ -18,25 +24,40 @@ def load_models():
 
     CLASS_LABELS = ['normal', 'spoiled']
 
-    return (detect_interpreter, class_interpreter, detect_input_details, detect_output_details, class_input_details, class_output_details, CLASS_LABELS)
+    return (
+        detect_interpreter, 
+        class_interpreter, 
+        detect_input_details, 
+        detect_output_details, 
+        class_input_details, 
+        class_output_details, 
+        CLASS_LABELS
+    )
 
-def detect_and_classify(frame, model_data, conf_threshold=0.5):
+def detect_and_classify_image(frame, model_data, conf_threshold=0.5):
     """
-    YOLOv8으로 객체 탐지 후, 각 객체를 ResNet18로 분류하는 함수.
-    결과적으로 이미지 전체가 '정상(0)'인지 '병충해(1)'인지 반환.
+    Perform object detection using YOLOv8 TFLite, followed by
+    classification of detected regions using Resnet-18.
     """
+
     if frame is None:
         print("[ERROR] Received empty frame.")
         return None, None
 
-    (detect_interpreter, class_interpreter, detect_input_details, detect_output_details, class_input_details, class_output_details, CLASS_LABELS) = model_data
+    (
+        detect_interpreter,
+        class_interpreter,
+        detect_input_details,
+        detect_output_details,
+        class_input_details,
+        class_output_details,
+        CLASS_LABELS
+    ) = model_data
 
     orig_h, orig_w = frame.shape[:2]
     result_frame = frame.copy()
 
-    # ------------------------
-    # YOLO Detection
-    # ------------------------
+    # YOLO Preprocessing
     input_height = detect_input_details[0]['shape'][1]
     input_width = detect_input_details[0]['shape'][2]
 
@@ -47,32 +68,21 @@ def detect_and_classify(frame, model_data, conf_threshold=0.5):
     detect_interpreter.set_tensor(detect_input_details[0]['index'], img)
     detect_interpreter.invoke()
 
-    # 출력: (N, 1, 5)로 전치 필요 [x, y, w, h, conf]
     detections = detect_interpreter.get_tensor(detect_output_details[0]['index'])[0]
 
-    print(f"Detections shape: {detections.shape}")
-    if detections.shape[1] > 0:
-        print(f"First detection entry: {detections[0]}")
-
-    has_spoiled = False
-
-    # ------------------------
-    # Postprocess + Classification
-    # ------------------------
+    # Normalize YOLO output format
     if detections.shape[0] == 5:
-    # (5, N) → (N, 5)
         detections = detections.transpose()
-    elif detections.shape[-1] == 5:
-    # (N, 5)
-        pass
-    else:
+    elif detections.shape[-1] != 5:
         print("[WARN] Unexpected detection shape:", detections.shape)
         return 0, frame
+    
+    has_spoiled = False
 
-
+    # Postprocess
     for det in detections:
         x, y, w, h, conf = det
-        # x, y, w, h, conf = det[:5]도 추천
+
         if conf < conf_threshold:
             continue
 
@@ -97,19 +107,22 @@ def detect_and_classify(frame, model_data, conf_threshold=0.5):
         class_output = class_interpreter.get_tensor(class_output_details[0]['index'])
         class_id = np.argmax(class_output)
 
-        # 시각화 및 결과 판단
         label = CLASS_LABELS[class_id]
-        color = (0, 0, 255) if label == 'spoiled' else (0, 255, 0) # BGR: Red for spoiled, Green for normal
+        color = (0, 0, 255) if label == 'spoiled' else (0, 255, 0)
 
         cv2.rectangle(result_frame, (xmin, ymin), (xmax, ymax), color, 2)
-        cv2.putText(result_frame, f"{label} (conf {conf:.2f})", (xmin, ymin - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        cv2.putText(
+            result_frame,
+            f"{label} (conf {conf:.2f})",
+            (xmin, ymin - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2
+        )
         
         if label == 'spoiled':
             has_spoiled = True
-            
-    # 파일 저장은 이 함수 밖(worker_loop)에서 처리하도록 제거
-    # 대신 시각화된 프레임을 반환합니다.
 
     classification_result = 1 if has_spoiled else 0
     return classification_result, result_frame
