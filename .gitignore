@@ -215,9 +215,8 @@ __marimo__/
 # Raw data
 data/
 weights/
-*.pt
-*.onnx
-*.tflite
+*pth
+
 
 # Logs and reports, organization files
 logs/
@@ -229,3 +228,7 @@ AGENTS.md
 .splits/
 
 .venv/
+
+data/*
+
+!data/.gitkeep
