@@ -16,7 +16,7 @@ from groundingdino.util.inference import load_image, load_model, predict
 
 VALID_EXTS = {".jpg",}
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 OUTPUTS_DIR = PROJECT_ROOT / "runs/groundingDINO"
 

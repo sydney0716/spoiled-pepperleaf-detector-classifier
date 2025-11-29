@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from torchvision import models, transforms
 from ultralytics import YOLO
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DET_WEIGHTS = PROJECT_ROOT / "models/trained/trained_yolov8s.pt"
 DEFAULT_CLS_WEIGHTS = PROJECT_ROOT / "models/trained/trained_resnet18.pth"
 DEFAULT_OUTPUT = PROJECT_ROOT / "runs/pipeline"

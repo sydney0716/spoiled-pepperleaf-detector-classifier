@@ -6,7 +6,7 @@ from typing import Sequence
 
 from ultralytics import YOLO
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEIGHTS = PROJECT_ROOT / "models/trained/trained_yolov8n.pt"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "runs"
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")

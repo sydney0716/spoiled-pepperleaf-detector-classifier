@@ -26,7 +26,7 @@ def _box_label_boxes_only(
 yplot.Annotator.box_label = _box_label_boxes_only
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Default to the processed detection dataset within the repo (images/ + labels/)
 DEFAULT_DATASET_ROOT = PROJECT_ROOT / "data/detection_processed"

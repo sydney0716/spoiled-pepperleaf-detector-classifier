@@ -9,7 +9,7 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEIGHTS = PROJECT_ROOT / "models/trained/trained_resnet18.pth"
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
 CLASS_LABELS = ["normal", "spoiled"]

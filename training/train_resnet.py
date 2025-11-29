@@ -25,7 +25,7 @@ DEFAULT_VAL_SPLIT = 0.15
 DEFAULT_TEST_SPLIT = 0.15
 DEFAULT_RANDOM_SEED = 42
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data/classification_processed"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "models/trained"
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results"

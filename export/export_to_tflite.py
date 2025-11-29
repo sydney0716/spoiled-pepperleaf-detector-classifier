@@ -24,7 +24,7 @@ from torchvision import models
 from ultralytics import YOLO  # type: ignore
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TRAINED_ROOT = PROJECT_ROOT / "models" / "trained"
 EXPORT_ROOT = PROJECT_ROOT / "models" / "exported"
 DEFAULT_PATHS: Dict[str, Path] = {

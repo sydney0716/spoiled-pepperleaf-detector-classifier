@@ -11,11 +11,11 @@ from typing import Dict, Iterable, List, Tuple
 import torch
 from ultralytics import YOLO
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_COCO_JSON = REPO_ROOT / "data/labeling_data_for_labeling_yolo11s/_annotations.coco.json"
-DEFAULT_IMAGE_ROOT = REPO_ROOT / "data/detection_processed/images"
-DEFAULT_OUTPUT_ROOT = REPO_ROOT / "runs/labeled_data_yolo11s"
-DEFAULT_PROJECT_ROOT = REPO_ROOT / "results/labeling_yolo11s"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_COCO_JSON = PROJECT_ROOT / "data/labeling_data_for_labeling_yolo11s/_annotations.coco.json"
+DEFAULT_IMAGE_ROOT = PROJECT_ROOT / "data/detection_processed/images"
+DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "runs/labeled_data_yolo11s"
+DEFAULT_PROJECT_ROOT = PROJECT_ROOT / "results/labeling_yolo11s"
 
 
 DEFAULT_CLASS_NAME = "leaf"
