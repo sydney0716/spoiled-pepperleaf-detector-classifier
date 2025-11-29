@@ -209,9 +209,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Ignore everything by default
-*
-
 # Keep the ignore file itself
 !.gitignore
 
