@@ -59,7 +59,7 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
 
 1. **Download Data**
    - Download the dataset archive (zip) which contains the pre-processed data.
-   - *Link:* [Processed Dataset](https://drive.google.com/file/d/1soo7mw3XYsW9-TKpL6B7ln9jBEWreFKz/view?usp=share_link)
+   - *Link:* [Processed Dataset](https://drive.google.com/file/d/1rpqLOnmaRJqQnmmzvI4QcXY52M85mHnL/view?usp=share_link)
    - **Structure:** The zip file contains three directories:
      - `classification_processed/`: Ready for ResNet training.
      - `detection_processed/`: Ready for YOLO training.

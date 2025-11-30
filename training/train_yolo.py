@@ -285,6 +285,13 @@ def main() -> None:
         shutil.copy2(best_weight_path, target_path)
         print(f"[INFO] Copied best weights to {target_path}")
 
+        # Additionally save to runs/labeling/labeling_yolo11s.pt as requested
+        labeling_save_dir = PROJECT_ROOT / "runs/labeling"
+        labeling_save_dir.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+        labeling_target_path = labeling_save_dir / "labeling_yolo11s.pt"
+        shutil.copy2(best_weight_path, labeling_target_path)
+        print(f"[INFO] Copied best weights to {labeling_target_path}")
+
 
 if __name__ == "__main__":
     main()
