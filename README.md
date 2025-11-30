@@ -1,20 +1,24 @@
-# spoiled-pepperleaf-detector-classifier
-YOLO-based Korean pepper leaf detection and ResNet18 disease classification for edge deployment.
+# Edge-Optimized Pepper Leaf Disease Detector
 
-## Data Usage Notice
+A lightweight, real-time computer vision system designed for the automated diagnosis of Korean pepper leaf diseases on edge devices (Raspberry Pi).
 
-This project utilizes datasets provided by AI Hub (Korea Information Society Agency) for research and model development purposes.
-According to AI Hub’s data usage policy, the original images, resized images, and any derived annotations cannot be redistributed or included in this repository.
+## Dataset
 
-The dataset used in this project was processed (resized to 640×640) and annotated using Grounding DINO and YOLO-based models, but these data and labels are not publicly released due to copyright and redistribution restrictions.
+This project utilizes datasets provided by AI Hub (Korea Information Society Agency). We have obtained permission to distribute the processed version of the dataset used in this project.
 
-Only source code, configuration files, and model architectures are included here.
-The trained model weights, original or processed images, and annotation files are excluded.
+You can download the pre-processed dataset (images resized to 640x640, annotated with Grounding DINO and YOLO) directly:
+- **Processed Dataset:** [Download Link](https://drive.google.com/file/d/1rpqLOnmaRJqQnmmzvI4QcXY52M85mHnL/view?usp=share_link)
 
-If you wish to reproduce the experiments, please:
-1. Request and download the dataset directly from AI Hub after obtaining usage approval.
-2. Place the downloaded data under the `data/` directory following the structure described in this repository.
-3. Run the preprocessing and training scripts as provided.
+Please unzip the contents into the `data/` directory following the structure described in the repository.
+
+## Repository Structure
+
+- `data_prep/`: Scripts for data preprocessing and auto-labeling (Grounding DINO).
+- `training/`: Training scripts for YOLO and ResNet.
+- `export/`: Scripts to convert PyTorch models to TFLite/ONNX.
+- `scripts/`: Main inference code for Raspberry Pi, including communication modules.
+- `models/`: Stores the final deployed TFLite models.
+- `assets/`: Demo images and performance graphs for documentation.
 
 ## Setup
 
@@ -62,50 +66,154 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
 
 ## Procedure
 
-### Detection Pipeline
 
-1. **Download Data**
-   - Download the dataset archive (zip) which contains the pre-processed data.
-   - *Link:* [Processed Dataset](https://drive.google.com/file/d/1rpqLOnmaRJqQnmmzvI4QcXY52M85mHnL/view?usp=share_link)
-   - **Structure:** The zip file contains three directories:
-     - `classification_processed/`: Ready for ResNet training.
-     - `detection_processed/`: Ready for YOLO training.
-     - `labeling_data_for_labeling_yolo11s/`: Intermediate data for the labeling pipeline.
-   - **Action:** Unzip the contents into the `data/` directory.
-     ```bash
-     unzip <downloaded_file>.zip -d data/
-     ```
 
-2. **Select Files**
-   - Select files for detection (`select_detection_subset.py`).
+### 1. Data Preparation (Labeling)
 
-3. **Preprocessing**
-   - Resize images to 640x640.
+If you wish to process raw data from scratch (instead of using the pre-processed download), follow this pipeline:
 
-4. **Run Labeling**
-   - Test Grounding DINO for labeling.
-   - Run `data_prep/run_labeling_grounding_dino.py`.
 
-5. **Train/Test YOLO**
-   - Train YOLOv11s on the initial set.
-   - Run `training/train_yolo.py`.
+
+1.  **Auto-Labeling (Grounding DINO)**
+
+    Generate initial bounding boxes for leaves.
+
+    ```bash
+
+    python data_prep/run_labeling_grounding_dino.py
+
+    ```
+
+
+
+2.  **Train Auto-Labeler (YOLO)**
+
+    Train a YOLO model on verified data to label the rest.
+
+    ```bash
+
+    python data_prep/train_labeling_yolov11.py
+
+    ```
+
+
+
+### 2. Detection Pipeline (YOLO)
+
+
+
+1.  **Download Data**
+
+    - Download the processed dataset (already resized to 640x640).
+
+    - *Link:* [Processed Dataset](https://drive.google.com/file/d/1rpqLOnmaRJqQnmmzvI4QcXY52M85mHnL/view?usp=share_link)
+
+    - Unzip into `data/`:
+
+      ```bash
+
+      unzip <downloaded_file>.zip -d data/
+
+      ```
+
+
+
+2.  **Train YOLO**
+
+    Train the detection model (e.g., YOLOv11n).
+
+    ```bash
+
+    python training/train_yolo.py --model yolo11n
+
+    ```
+
+
 
 ### Detection Results
+
 ![YOLO Comparison](assets/yolo_comparison_plot.png)
 
-### Classification Pipeline
 
-1. **Download Raw Data**
-   - Download classification dataset from AI Hub.
 
-2. **Train ResNet**
-   ```bash
-   # Train ResNet18 (default)
-   python training/train_resnet.py --backbone resnet18
-   
-   # Train ResNet50
-   python training/train_resnet.py --backbone resnet50
-   ```
+### 3. Classification Pipeline (ResNet)
+
+
+
+1.  **Train ResNet**
+
+    Train the disease classifier (ResNet18 or ResNet50).
+
+    ```bash
+
+    # Train ResNet18
+
+    python training/train_resnet.py --arch resnet18
+
+    
+
+    # Train ResNet50
+
+    python training/train_resnet.py --arch resnet50
+
+    ```
+
+
 
 ### Classification Results
+
 ![ResNet Comparison](assets/resnet_comparison.png)
+
+
+
+## Deployment & Inference
+
+
+
+### 1. Export Models
+
+Convert PyTorch models to TFLite for edge deployment.
+
+```bash
+
+python export/export_to_tflite.py --model-path runs/detection/trained_yolo11n.pt --output models/exported/yolov11n.tflite
+
+```
+
+
+
+### 2. Run Single Image Inference
+
+Run the full detection + classification pipeline on a single image.
+
+```bash
+
+python scripts/detection_and_classification.py \
+
+    --image <path_to_image.jpg> \
+
+    --det-weights models/trained/trained_yolov8s.pt \
+
+    --cls-weights models/trained/trained_resnet18.pth
+
+```
+
+
+
+### 3. Run Batch Inference
+
+Process a directory of images for detection or classification separately.
+
+```bash
+
+# Run Detection on a folder
+
+python scripts/run_detection.py --source <path_to_images_folder>
+
+
+
+# Run Classification on a folder of crops
+
+python scripts/run_classification.py --source <path_to_crops_folder>
+
+```
