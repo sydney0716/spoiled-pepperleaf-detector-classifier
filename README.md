@@ -53,6 +53,13 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
 3. **YOLOv11s**: Trained on the corrected 230 images to label the remaining ~160 images.
 4. **Final Correction**: Manually verified the remaining labels.
 
+### Labeling Examples
+![Labeling with Grounding DINO](assets/labeling_groundingDINO.png)
+*Grounding DINO Labeling*
+
+![Labeling with YOLOv11s](assets/labeling_yolov11s.png)
+*YOLOv11s Labeling*
+
 ## Procedure
 
 ### Detection Pipeline
@@ -83,6 +90,9 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
    - Train YOLOv11s on the initial set.
    - Run `training/train_yolo.py`.
 
+### Detection Results
+![YOLO Comparison](assets/yolo_comparison_plot.png)
+
 ### Classification Pipeline
 
 1. **Download Raw Data**
@@ -96,3 +106,6 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
    # Train ResNet50
    python training/train_resnet.py --backbone resnet50
    ```
+
+### Classification Results
+![ResNet Comparison](assets/resnet_comparison.png)
