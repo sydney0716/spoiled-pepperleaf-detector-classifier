@@ -59,10 +59,10 @@ The labeling from AI Hub was insufficient, so we adopted a semi-automated pipeli
 
 ### Labeling Examples
 ![Labeling with Grounding DINO](assets/labeling_groundingDINO.png)
-*Grounding DINO Labeling*
+Grounding DINO Labeling
 
 ![Labeling with YOLOv11s](assets/labeling_yolov11s.png)
-*YOLOv11s Labeling*
+YOLOv11s Labeling
 
 ## Procedure
 
@@ -120,12 +120,13 @@ If you wish to process raw data from scratch (instead of using the pre-processed
 
 2.  **Train YOLO**
 
-    Train the detection model (e.g., YOLOv11n).
+    Train the detection model. **For this project, we use `yolo8n` as the primary model** due to its balance of speed and accuracy on edge devices. Other models are provided for comparison purposes.
+    
+    **Available Models:** `yolo8n` (default), `yolo8s`, `yolo11n`, `yolo11s`
 
     ```bash
-
-    python training/train_yolo.py --model yolo11n
-
+    # Train the primary model (YOLOv8 Nano)
+    python training/train_yolo.py --model yolo8n
     ```
 
 
@@ -142,20 +143,14 @@ If you wish to process raw data from scratch (instead of using the pre-processed
 
 1.  **Train ResNet**
 
-    Train the disease classifier (ResNet18 or ResNet50).
+    Train the disease classifier. **We utilize `resnet18` as the primary model** for efficient inference. `resnet50` is available for performance comparison.
 
     ```bash
-
-    # Train ResNet18
-
+    # Train the primary model (ResNet18)
     python training/train_resnet.py --arch resnet18
 
-    
-
-    # Train ResNet50
-
+    # Train ResNet50 (for comparison)
     python training/train_resnet.py --arch resnet50
-
     ```
 
 
@@ -182,38 +177,23 @@ python export/export_to_tflite.py --model-path runs/detection/trained_yolo11n.pt
 
 
 
-### 2. Run Single Image Inference
+### 2. Run Inference
 
+**Single Image Inference**
 Run the full detection + classification pipeline on a single image.
-
 ```bash
-
 python scripts/detection_and_classification.py \
-
     --image <path_to_image.jpg> \
-
     --det-weights models/trained/trained_yolov8s.pt \
-
     --cls-weights models/trained/trained_resnet18.pth
-
 ```
 
-
-
-### 3. Run Batch Inference
-
+**Batch Inference**
 Process a directory of images for detection or classification separately.
-
 ```bash
-
 # Run Detection on a folder
-
 python scripts/run_detection.py --source <path_to_images_folder>
 
-
-
 # Run Classification on a folder of crops
-
 python scripts/run_classification.py --source <path_to_crops_folder>
-
 ```
