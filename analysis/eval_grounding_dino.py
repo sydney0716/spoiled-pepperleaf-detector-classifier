@@ -21,7 +21,7 @@ DATASET_ROOT = PROJECT_ROOT / "detection_yolo/.splits/detection_processed_split"
 IMAGES_VAL_DIR = DATASET_ROOT / "images/val"
 LABELS_VAL_DIR = DATASET_ROOT / "labels/val"
 
-OUTPUT_DIR = PROJECT_ROOT / "results/detection/grounding_dino"
+OUTPUT_DIR = PROJECT_ROOT / "runs/detection/grounding_dino"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUND_TRUTH_JSON = OUTPUT_DIR / "val_ground_truth.json"
@@ -116,6 +116,13 @@ def create_coco_ground_truth_from_yolo() -> None:
         img_id_counter += 1
 
     coco_output = {
+        "info": {
+            "description": "COCO-style dataset generated from YOLO labels",
+            "version": "1.0",
+            "year": 2025,
+            "contributor": "",
+            "date_created": "2025-11-30"
+        },
         "images": images,
         "annotations": annotations,
         "categories": categories

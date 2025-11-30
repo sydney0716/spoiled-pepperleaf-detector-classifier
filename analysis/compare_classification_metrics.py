@@ -8,7 +8,7 @@ import numpy as np
 def plot_comparison():
     # Project root setup (assuming script is in analysis/)
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = PROJECT_ROOT / "results"
+    RESULTS_DIR = PROJECT_ROOT / "runs" / "classification"
 
     resnet18_model_path = RESULTS_DIR / "resnet18/result.json"
     resnet50_model_path = RESULTS_DIR / "resnet50/result.json"
@@ -16,8 +16,7 @@ def plot_comparison():
     def get_metrics(json_path):
         """Reads result.json and calculates Precision, Recall, F1 for the TEST set."""
         if not json_path.exists():
-            print(f"[WARN] Results file not found: {json_path}")
-            return [0.0, 0.0, 0.0]
+            raise FileNotFoundError(f"Results file not found: {json_path}")
 
         with open(json_path, 'r') as f:
             data = json.load(f)
@@ -94,7 +93,7 @@ def plot_comparison():
 
     fig.tight_layout()
     
-    output_path = 'comparison_plot.png'
+    output_path = 'resnet_comparison_plot.png'
     print(f"Saving plot to {output_path}...")
     plt.savefig(output_path, dpi=200)
     plt.close(fig)

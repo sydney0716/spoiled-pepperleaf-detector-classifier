@@ -8,20 +8,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_DIR = PROJECT_ROOT / "runs" / "detection"
 
-RESULTS_DIR = Path("results/detection")
 YOLO_RUNS: Dict[str, Path] = {
-    "YOLOv8n": RESULTS_DIR / "yolov8n" / "results.csv",
-    "YOLOv8s": RESULTS_DIR / "yolov8s" / "results.csv",
-    "YOLOv11n": RESULTS_DIR / "yolov11n" / "results.csv",
-    "YOLOv11s": RESULTS_DIR / "yolov11s" / "results.csv",
+    "YOLOv8n": RESULTS_DIR / "yolo8n" / "results.csv",
+    "YOLOv8s": RESULTS_DIR / "yolo8s" / "results.csv",
+    "YOLOv11n": RESULTS_DIR / "yolo11n" / "results.csv",
+    "YOLOv11s": RESULTS_DIR / "yolo11s" / "results.csv",
 }
 
 DINO_METRICS = RESULTS_DIR / "grounding_dino" / "val_metrics.csv"
 
-OUTPUT_CSV = RESULTS_DIR / "comparison" / "model_comparison.csv"
-OUTPUT_FIG = RESULTS_DIR / "comparison" / "model_comparison.png"
-
+OUTPUT_FIG = PROJECT_ROOT / "yolo_comparison_plot.png"
 
 def load_best_row(csv_path: Path) -> Optional[pd.Series]:
     if not csv_path.exists():
@@ -29,8 +28,15 @@ def load_best_row(csv_path: Path) -> Optional[pd.Series]:
     df = pd.read_csv(csv_path)
     if df.empty:
         return None
+    # YOLOv8/v11 CSV headers often have spaces; strip them
+    df.columns = [c.strip() for c in df.columns]
+    
     if "metrics/mAP50-95(B)" not in df.columns:
+        # Fallback or check if it's DINO format
+        if "AP" in df.columns: # DINO
+            return df.iloc[0]
         return df.iloc[-1]
+    
     idx = df["metrics/mAP50-95(B)"].idxmax()
     return df.loc[idx]
 
@@ -53,7 +59,8 @@ def summarize() -> List[Dict[str, Optional[float]]]:
             }
         )
 
-    for path in DINO_METRICS:
+    # Wrap single path in list for iteration
+    for path in [DINO_METRICS]:
         best = load_best_row(path)
         if best is None:
             continue
@@ -67,21 +74,8 @@ def summarize() -> List[Dict[str, Optional[float]]]:
                 "recall": float(best.get("AR100", float("nan"))),
             }
         )
-        break
-
+    
     return rows
-
-
-def write_csv(rows: List[Dict[str, Optional[float]]]) -> None:
-    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["model", "best_epoch", "mAP50-95", "mAP50", "precision", "recall"]
-    with OUTPUT_CSV.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-    print(f"[OK] Wrote summary to {OUTPUT_CSV}")
-
 
 def draw_chart(rows: List[Dict[str, Optional[float]]]) -> None:
     df = pd.DataFrame(rows)
@@ -127,7 +121,6 @@ def main() -> None:
     rows = summarize()
     if not rows:
         raise SystemExit("No metrics found; ensure YOLO runs and Grounding DINO metrics exist.")
-    write_csv(rows)
     draw_chart(rows)
 
 

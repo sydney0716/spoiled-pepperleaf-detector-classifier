@@ -366,8 +366,8 @@ def main():
     args.save_dir.mkdir(parents=True, exist_ok=True)
     (args.save_dir / args.arch).mkdir(parents=True, exist_ok=True)
 
-    model_save_path = args.save_dir / config["model_filename"]
     results_dir = args.save_dir / args.arch
+    model_save_path = results_dir / config["model_filename"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")

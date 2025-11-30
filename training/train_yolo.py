@@ -221,7 +221,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    dataset_root: Path = args.dataset_root.resolve()
+    dataset_root: Path = args.data_dir.resolve()
     if not dataset_root.exists():
         raise FileNotFoundError(f"Dataset root {dataset_root} does not exist.")
 
