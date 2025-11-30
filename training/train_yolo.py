@@ -11,7 +11,6 @@ from ultralytics.utils import plotting as yplot
 
 _OriginalBoxLabel = yplot.Annotator.box_label
 
-
 def _box_label_boxes_only(
     self,
     box,
@@ -25,24 +24,22 @@ def _box_label_boxes_only(
 # Apply the monkey-patch globally
 yplot.Annotator.box_label = _box_label_boxes_only
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Default to the processed detection dataset within the repo (images/ + labels/)
-DEFAULT_DATASET_ROOT = PROJECT_ROOT / "data/detection_processed"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "data/detection_processed"
+PRETRAINED_DIR = PROJECT_ROOT / "models/pretrained"
+DEFAULT_CACHE_DIR = PROJECT_ROOT / "detection_yolo/.splits"
+DEFAULT_SAVE_DIR = PROJECT_ROOT / "runs/detection"
 
 DEFAULT_EPOCHS = 150
 DEFAULT_BATCH = 16
 DEFAULT_IMG_SIZE = 640
-DEFAULT_PROJECT = PROJECT_ROOT / "results"
 DEFAULT_WORKERS = 8
 DEFAULT_DEVICE = "cuda:0"  # Change to "cpu" if no GPU is available
 DEFAULT_CLASS_NAME = "Pepper leaf"
 DEFAULT_VAL_FRACTION = 0.2
 DEFAULT_SEED = 42
-DEFAULT_SCRATCH_DIR = PROJECT_ROOT / "detection_yolo/.splits"
-
-PRETRAINED_DIR = PROJECT_ROOT / "models/pretrained"
 WEIGHT_CHOICES = {
     "yolo8n": "yolov8n.pt",
     "yolo8s": "yolov8s.pt",
@@ -87,12 +84,12 @@ def build_dataset_yaml(
     return yaml_path
 
 def list_image_files(image_dir: Path) -> Sequence[Path]:
-    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+    valid_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'}
     return sorted([p for p in image_dir.iterdir() if p.suffix.lower() in valid_exts])
 
 def prepare_split_dataset(
     dataset_root: Path,
-    scratch_dir: Path,
+    cache_dir: Path, # Renamed from scratch_dir
     val_fraction: float,
     seed: int,
 ) -> Path:
@@ -113,9 +110,9 @@ def prepare_split_dataset(
     if not 0 < val_fraction < 1:
         raise ValueError("val_fraction must be between 0 and 1 (exclusive).")
 
-    scratch_dir = scratch_dir.resolve()
-    scratch_dir.mkdir(parents=True, exist_ok=True)
-    split_root = scratch_dir / f"{dataset_root.name}_split"
+    cache_dir = cache_dir.resolve() # Renamed from scratch_dir
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    split_root = cache_dir / f"{dataset_root.name}_split"
 
     # Reset previous split
     if split_root.exists():
@@ -187,40 +184,39 @@ def parse_args() -> argparse.Namespace:
         description="Train YOLOv8/YOLOv11 (n|s) on Korean pepper leaf detections with fixed hyper-parameters."
     )
     parser.add_argument(
-        "--dataset-root",
+        "--data-dir",
         type=Path,
-        default=DEFAULT_DATASET_ROOT,
+        default=DEFAULT_DATA_DIR,
         help=(
             "Path to the dataset root containing images/ and labels/ folders "
-            f"(default: {DEFAULT_DATASET_ROOT})."
+            f"(default: {DEFAULT_DATA_DIR})."
         ),
     )
     parser.add_argument(
-        "--yolo",
+        "--model",
         choices=WEIGHT_CHOICES.keys(),
         default=DEFAULT_WEIGHT_NAME,
         help="Choose pretrained weights from the default pretrained directory.",
     )
     parser.add_argument(
-        "--project-dir",
+        "--save-dir",
         type=Path,
-        default=DEFAULT_PROJECT,
+        default=DEFAULT_SAVE_DIR,
         help=(
             "Directory where training runs will be saved "
-            f"(default: {DEFAULT_PROJECT})."
+            f"(default: {DEFAULT_SAVE_DIR})."
         ),
     )
     parser.add_argument(
-        "--scratch-dir",
+        "--cache-dir",
         type=Path,
-        default=DEFAULT_SCRATCH_DIR,
+        default=DEFAULT_CACHE_DIR,
         help=(
             "Directory where automatic splits are cached "
-            f"(default: {DEFAULT_SCRATCH_DIR})."
+            f"(default: {DEFAULT_CACHE_DIR})."
         ),
     )
     return parser.parse_args()
-
 
 def main() -> None:
     args = parse_args()
@@ -230,10 +226,10 @@ def main() -> None:
         raise FileNotFoundError(f"Dataset root {dataset_root} does not exist.")
 
     # Where to cache the train/val split
-    scratch_dir = args.scratch_dir.resolve()
+    cache_dir = args.cache_dir.resolve()
     split_root = prepare_split_dataset(
         dataset_root=dataset_root,
-        scratch_dir=scratch_dir,
+        cache_dir=cache_dir,
         val_fraction=DEFAULT_VAL_FRACTION,
         seed=DEFAULT_SEED,
     )
@@ -246,7 +242,7 @@ def main() -> None:
         yaml_name="detection_processed_split.yaml",
     )
 
-    weight_filename = WEIGHT_CHOICES[args.yolo]
+    weight_filename = WEIGHT_CHOICES[args.model]
     weights_path = PRETRAINED_DIR / weight_filename
     if not weights_path.exists():
         raise FileNotFoundError(
@@ -254,8 +250,8 @@ def main() -> None:
             f"Expected under {PRETRAINED_DIR}."
         )
 
-    project_dir = args.project_dir.resolve()
-    project_dir.mkdir(parents=True, exist_ok=True)
+    save_dir = args.save_dir.resolve()
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     model = YOLO(str(weights_path))
     train_kwargs = {
@@ -263,8 +259,8 @@ def main() -> None:
         "epochs": DEFAULT_EPOCHS,
         "imgsz": DEFAULT_IMG_SIZE,
         "batch": DEFAULT_BATCH,
-        "project": str(project_dir),
-        "name": args.yolo,
+        "project": str(save_dir),
+        "name": args.model,
         "workers": DEFAULT_WORKERS,
         "device": DEFAULT_DEVICE,
     }
@@ -280,10 +276,12 @@ def main() -> None:
             best_weight_path = Path(best_attr)
 
     if best_weight_path and best_weight_path.exists():
-        trained_dir = PROJECT_ROOT / "models/trained"
-        trained_dir.mkdir(parents=True, exist_ok=True)
+        # We can save it directly in the save_dir, maybe with a prefix or just ensure consistency
+        # The training run is already inside save_dir/model_name, so maybe we just copy it up?
+        # Or consistent with resnet: save_dir/trained_yolo...pt
+        
         weight_name = Path(weights_path).stem
-        target_path = trained_dir / f"trained_{weight_name}.pt"
+        target_path = save_dir / f"trained_{weight_name}.pt"
         shutil.copy2(best_weight_path, target_path)
         print(f"[INFO] Copied best weights to {target_path}")
 

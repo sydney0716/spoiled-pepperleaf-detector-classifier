@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
-"""Run GroundingDINO over the entire dataset and save COCO annotations (optionally visuals)."""
+"""
+This script uses Grounding DINO to generate initial annotations (pre-labeling) for raw data.
+These generated labels serve as a starting point and are intended to be refined through manual verification.
+"""
 
 from __future__ import annotations
 

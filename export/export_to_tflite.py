@@ -21,26 +21,26 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.nn as nn
 from torchvision import models
-from ultralytics import YOLO  # type: ignore
-
-
+from ultralytics import YOLO
+s
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TRAINED_ROOT = PROJECT_ROOT / "models" / "trained"
 EXPORT_ROOT = PROJECT_ROOT / "models" / "exported"
 DEFAULT_PATHS: Dict[str, Path] = {
-    "detection": TRAINED_ROOT,
-    "classification": TRAINED_ROOT,
+    "yolo": TRAINED_ROOT, # Renamed from "detection"
+    "resnet": TRAINED_ROOT, # Renamed from "classification"
     "export": EXPORT_ROOT,
 }
 
 CLASSIFIER_ARCH = {
     "resnet18": {"builder": models.resnet18, "hidden_features": 256},
+    "resnet50": {"builder": models.resnet50, "hidden_features": 512},
 }
 
-def create_classifier(backbone: str, num_classes: int = 2) -> nn.Module:
-    if backbone not in CLASSIFIER_ARCH:
-        raise ValueError(f"Unsupported backbone '{backbone}'. Expected one of {tuple(CLASSIFIER_ARCH)}.")
-    config = CLASSIFIER_ARCH[backbone]
+def create_classifier(model_name: str, num_classes: int = 2) -> nn.Module:
+    if model_name not in CLASSIFIER_ARCH:
+        raise ValueError(f"Unsupported model '{model_name}'. Expected one of {tuple(CLASSIFIER_ARCH)}.")
+    config = CLASSIFIER_ARCH[model_name]
     model = config["builder"](weights=None)
     num_features = model.fc.in_features
     hidden = config["hidden_features"]
@@ -59,15 +59,15 @@ def parse_args() -> argparse.Namespace:
         description="Export trained detection/classification models for Raspberry Pi deployment."
     )
     parser.add_argument(
-        "--detection-dir",
+        "--yolo-dir",
         type=Path,
-        default=DEFAULT_PATHS["detection"],
+        default=DEFAULT_PATHS["yolo"],
         help="Directory that stores YOLO detection checkpoints (*.pt).",
     )
     parser.add_argument(
-        "--classification-dir",
+        "--resnet-dir",
         type=Path,
-        default=DEFAULT_PATHS["classification"],
+        default=DEFAULT_PATHS["resnet"], 
         help="Directory that stores ResNet classification checkpoints (*.pth).",
     )
     parser.add_argument(
@@ -89,21 +89,34 @@ def export_detection_model(weights_path: Path, export_dir: Path) -> List[Path]:
     model = YOLO(str(weights_path))
     run_name = f"{weights_path.stem}_tflite"
     print(f"[DETECTION] Exporting {weights_path.name} -> TFLite")
-    result = model.export(
-        format="tflite",
-        imgsz=640,
-        dynamic=False,
-        simplify=True,
-        project=str(export_dir),
-        name=run_name,
-        device="cpu",
-    )
+    try:
+        result = model.export(
+            format="tflite",
+            imgsz=640,
+            dynamic=False,
+            simplify=True,
+            project=str(export_dir),
+            name=run_name,
+            device="cpu",
+        )
+    except Exception as e:
+        print(f"  ! Export failed: {e}")
+        return []
+
     if result is None:
         print(f"  ! Exporter did not return a path for {run_name}")
         return []
-    tflite_path = Path(result).resolve()
+    
+    # result can be a single string path or list depending on version
+    if isinstance(result, list):
+         tflite_path = Path(result[0]).resolve()
+    else:
+         tflite_path = Path(result).resolve()
+
     export_dir.mkdir(parents=True, exist_ok=True)
     target_path = export_dir / f"{weights_path.stem}.tflite"
+    
+    # YOLO export might create a subdir, we want to move the file up if so or rename it
     if tflite_path != target_path:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(tflite_path), target_path)
@@ -114,12 +127,12 @@ def export_detection_model(weights_path: Path, export_dir: Path) -> List[Path]:
 
 def load_classifier(weights_path: Path) -> tuple[torch.nn.Module, str]:
     checkpoint = torch.load(weights_path, map_location="cpu")
-    backbone = checkpoint.get("backbone", "resnet18")
-    model = create_classifier(backbone=backbone, num_classes=2)
+    model_name = checkpoint.get("model_name", checkpoint.get("backbone", "resnet18"))
+    model = create_classifier(model_name=model_name, num_classes=2)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
     model.load_state_dict(state_dict)
     model.eval()
-    return model, backbone
+    return model, model_name
 
 
 def export_classifier_artifacts(
@@ -204,13 +217,14 @@ def summarize(group: str, conversions: List[Dict[str, Optional[Path]]]) -> None:
 
 def run() -> None:
     args = parse_args()
-    detection_dir = args.detection_dir.resolve()
-    classification_dir = args.classification_dir.resolve()
+    yolo_dir = args.yolo_dir.resolve() # Changed from detection_dir
+    resnet_dir = args.resnet_dir.resolve() # Changed from classification_dir
     export_root = args.export_dir.resolve()
     export_root.mkdir(parents=True, exist_ok=True)
 
-    detection_weights = [p for p in list_weight_files(detection_dir, ".pt") if "yolov8n" in p.stem.lower()]
-    classification_weights = [p for p in list_weight_files(classification_dir, ".pth") if "resnet18" in p.stem.lower()]
+    # Relaxed filtering: Process all .pt and .pth files in the respective dirs
+    detection_weights = list_weight_files(yolo_dir, ".pt") # Using yolo_dir
+    classification_weights = list_weight_files(resnet_dir, ".pth") # Using resnet_dir
 
     detection_results: List[Dict[str, Optional[Path]]] = []
     classification_results: List[Dict[str, Optional[Path]]] = []
@@ -221,6 +235,9 @@ def run() -> None:
     if detection_weights:
         detection_export_dir.mkdir(parents=True, exist_ok=True)
         for weight_path in detection_weights:
+            if "optimizer" in weight_path.stem: # Skip optimizer states if any
+                continue
+                
             try:
                 written_paths = export_detection_model(weight_path, detection_export_dir)
             except RuntimeError as exc:
@@ -230,25 +247,23 @@ def run() -> None:
                 {f"tflite_{idx}": path for idx, path in enumerate(written_paths)}
             )
     else:
-        print(f"[INFO] No detection checkpoints (*.pt) found in {detection_dir}")
+        print(f"[INFO] No detection checkpoints (*.pt) found in {yolo_dir}") # Using yolo_dir
 
     if classification_weights:
         classification_export_dir.mkdir(parents=True, exist_ok=True)
         for weight_path in classification_weights:
             print(f"[CLASSIFICATION] Loading {weight_path.name}")
             try:
-                model, backbone = load_classifier(weight_path)
+                model, model_name = load_classifier(weight_path)
             except (ValueError, RuntimeError) as exc:
                 print(f"  ! Failed to load {weight_path.name}: {exc}")
                 continue
-            if backbone != "resnet18":
-                print(f"  ! Skipping {weight_path.name}: backbone is {backbone}, expected resnet18")
-                continue
-            base_name = f"{weight_path.stem}_{backbone}"
+
+            base_name = f"{weight_path.stem}_{model_name}"
             outputs = export_classifier_artifacts(model, base_name, classification_export_dir)
             classification_results.append(outputs)
     else:
-        print(f"[INFO] No classification checkpoints (*.pth) found in {classification_dir}")
+        print(f"[INFO] No classification checkpoints (*.pth) found in {resnet_dir}") # Using resnet_dir
 
     summarize("detection", detection_results)
     summarize("classification", classification_results)

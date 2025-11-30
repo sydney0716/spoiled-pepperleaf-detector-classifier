@@ -10,11 +10,8 @@ def plot_comparison():
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
     RESULTS_DIR = PROJECT_ROOT / "results"
 
-    # Define model result paths
-    # Assuming 'resnet18' is the small model and 'resnet50' is the large one.
-    # Adjust these paths if your folder structure is different (e.g. results/resnet18/result.json)
-    small_model_path = RESULTS_DIR / "resnet18/result.json"
-    large_model_path = RESULTS_DIR / "resnet50/result.json"
+    resnet18_model_path = RESULTS_DIR / "resnet18/result.json"
+    resnet50_model_path = RESULTS_DIR / "resnet50/result.json"
 
     def get_metrics(json_path):
         """Reads result.json and calculates Precision, Recall, F1 for the TEST set."""
@@ -47,14 +44,14 @@ def plot_comparison():
         return [recall, precision, f1]
 
     # Extract metrics from the JSON files
-    model_small_scores = get_metrics(small_model_path)
-    model_large_scores = get_metrics(large_model_path)
+    resnet18_scores = get_metrics(resnet18_model_path)
+    resnet50_scores = get_metrics(resnet50_model_path)
 
     # Metric definitions for the plot
     metrics = ['Recall', 'Precision', 'F1-Score']
     
-    model_small_name = 'ResNet18 (Small)'
-    model_large_name = 'ResNet50 (Large)'
+    resnet18_name = 'ResNet18'
+    resnet50_name = 'ResNet50'
 
     x = np.arange(len(metrics))
     width = 0.35
@@ -62,16 +59,16 @@ def plot_comparison():
     fig, ax = plt.subplots(figsize=(8, 4.5))
     
     # Plotting columns
-    rects1 = ax.bar(x - width/2, model_small_scores, width, label=model_small_name)
-    rects2 = ax.bar(x + width/2, model_large_scores, width, label=model_large_name)
+    rects1 = ax.bar(x - width/2, resnet18_scores, width, label=resnet18_name)
+    rects2 = ax.bar(x + width/2, resnet50_scores, width, label=resnet50_name)
 
     ax.set_ylabel('Score')
-    ax.set_title('Model Performance Comparison: Small vs Large Architecture')
+    ax.set_title('Model Performance Comparison: ResNet18 vs ResNet50') # Updated title
     ax.set_xticks(x)
     ax.set_xticklabels(metrics)
     
     # Y-axis scaling logic
-    all_scores = model_small_scores + model_large_scores
+    all_scores = resnet18_scores + resnet50_scores
     # Handle case where all scores might be 0 if files are missing
     max_score = max(all_scores) if all_scores else 1.0
     ymax = max(1.0, max_score * 1.1)

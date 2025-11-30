@@ -1,3 +1,26 @@
+"""
+This will train ResNet-based classifiier for spoiled vs normal pepper leaves.
+Reads data from `data/classification_processed/images`.
+Directory structure:
+    data/classification_processed/
+        images/
+            normal/
+                img1.jpg
+                img2.jpg
+                ...
+            spoiled/
+                colletotrichum_acutatum/
+                    img3.jpg
+                    ...
+                pepper_mild_mottle_virus/
+                    img4.jpg
+                    ...
+                xanthomonas_campestris/
+                    img5.jpg
+                    ...
+Saves trained models to `models/trained/` and results to `results/`. 
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -27,8 +50,7 @@ DEFAULT_RANDOM_SEED = 42
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data/classification_processed"
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "models/trained"
-DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results"
+DEFAULT_SAVE_DIR = PROJECT_ROOT / "runs/classification"
 
 ARCH_CONFIG = {
     "resnet18": {
@@ -83,7 +105,7 @@ def get_image_paths_and_labels(data_dir: Path):
 
     image_paths: list[str] = []
     labels: list[int] = []
-    valid_suffixes = {".jpg", ".jpeg", ".png"}
+    valid_suffixes = {'.jpg', '.jpeg', '.png'}
 
     if normal_dir.exists():
         for img_path in sorted(normal_dir.rglob("*")):
@@ -182,11 +204,11 @@ def create_data_loaders(
     return train_loader, val_loader, test_loader
 
 
-def create_model(backbone: str, num_classes: int = 2, pretrained: bool = True):
-    if backbone not in ARCH_CONFIG:
-        raise ValueError(f"Unsupported backbone '{backbone}'")
+def create_model(arch: str, num_classes: int = 2, pretrained: bool = True):
+    if arch not in ARCH_CONFIG:
+        raise ValueError(f"Unsupported architecture '{arch}'")
 
-    config = ARCH_CONFIG[backbone]
+    config = ARCH_CONFIG[arch]
     model = config["builder"](pretrained=pretrained)
 
     for param in model.parameters():
@@ -204,7 +226,6 @@ def create_model(backbone: str, num_classes: int = 2, pretrained: bool = True):
         nn.Linear(hidden, num_classes),
     )
     return model
-
 
 def train_epoch(model, train_loader, criterion, optimizer, device):
     model.train()
@@ -324,22 +345,16 @@ def parse_args():
         help="Root directory of the prepared dataset.",
     )
     parser.add_argument(
-        "--model-dir",
+        "--save-dir",
         type=Path,
-        default=DEFAULT_MODEL_DIR,
-        help="Directory where checkpoints will be saved.",
+        default=DEFAULT_SAVE_DIR,
+        help="Directory where model checkpoints will be saved.",
     )
     parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=DEFAULT_RESULTS_DIR,
-        help="Directory where training plots will be written.",
-    )
-    parser.add_argument(
-        "--backbone",
+        "--arch",
         choices=ARCH_CONFIG.keys(),
         default="resnet18",
-        help="Which ResNet backbone to fine-tune.",
+        help="Which ResNet model to fine-tune.",
     )
     return parser.parse_args()
 
@@ -347,16 +362,16 @@ def parse_args():
 def main():
     args = parse_args()
 
-    config = ARCH_CONFIG[args.backbone]
-    args.model_dir.mkdir(parents=True, exist_ok=True)
-    (args.results_dir / args.backbone).mkdir(parents=True, exist_ok=True)
+    config = ARCH_CONFIG[args.arch]
+    args.save_dir.mkdir(parents=True, exist_ok=True)
+    (args.save_dir / args.arch).mkdir(parents=True, exist_ok=True)
 
-    model_save_path = args.model_dir / config["model_filename"]
-    results_dir = args.results_dir / args.backbone
+    model_save_path = args.save_dir / config["model_filename"]
+    results_dir = args.save_dir / args.arch
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    print(f"Selected backbone: {args.backbone}")
+    print(f"Selected arch: {args.arch}")
 
     print("Creating data loaders...")
     train_loader, val_loader, test_loader = create_data_loaders(
@@ -368,8 +383,8 @@ def main():
         random_seed=DEFAULT_RANDOM_SEED,
     )
 
-    print(f"Creating {args.backbone} model...")
-    model = create_model(backbone=args.backbone, pretrained=True, num_classes=2).to(device)
+    print(f"Creating {args.arch} model...")
+    model = create_model(arch=args.arch, pretrained=True, num_classes=2).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
@@ -426,7 +441,7 @@ def main():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "val_acc": val_acc,
                     "val_loss": val_loss,
-                    "backbone": args.backbone,
+                    "arch": args.arch,
                 },
                 model_save_path,
             )

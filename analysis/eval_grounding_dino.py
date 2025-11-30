@@ -16,7 +16,7 @@ from groundingdino.util.inference import load_image, load_model, predict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-DATASET_ROOT = PROJECT_ROOT / "data/detection_processed"
+DATASET_ROOT = PROJECT_ROOT / "detection_yolo/.splits/detection_processed_split"
 
 IMAGES_VAL_DIR = DATASET_ROOT / "images/val"
 LABELS_VAL_DIR = DATASET_ROOT / "labels/val"

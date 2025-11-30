@@ -18,31 +18,50 @@ DEFAULT_DET_CONF = 0.25
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
 CLASS_LABELS = ["normal", "spoiled"]
 
+ARCH_CONFIG = {
+    "resnet18": {
+        "builder": models.resnet18,
+        "hidden_features": 256,
+    },
+    "resnet50": {
+        "builder": models.resnet50,
+        "hidden_features": 512,
+    },
+}
 
 def is_supported_image(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
 
 
-def build_classifier(num_classes: int = 2) -> nn.Module:
-    model = models.resnet18(weights=None)
-    for param in model.parameters():
-        param.requires_grad = False
-    for param in model.layer4.parameters():
-        param.requires_grad = True
+def build_classifier(model_name: str = "resnet18", num_classes: int = 2) -> nn.Module:
+    if model_name not in ARCH_CONFIG:
+        raise ValueError(f"Unsupported model '{model_name}'. Supported: {list(ARCH_CONFIG.keys())}")
+
+    config = ARCH_CONFIG[model_name]
+    model = config["builder"](weights=None)
+    
+    # Freeze/Unfreeze logic same as training (optional for inference but good for matching structure)
+    # Actually for inference we just need the architecture structure to load state_dict
+    
     num_features = model.fc.in_features
+    hidden = config["hidden_features"]
     model.fc = nn.Sequential(
         nn.Dropout(0.5),
-        nn.Linear(num_features, 256),
+        nn.Linear(num_features, hidden),
         nn.ReLU(),
         nn.Dropout(0.3),
-        nn.Linear(256, num_classes),
+        nn.Linear(hidden, num_classes),
     )
     return model
 
 
 def load_classifier(weights_path: Path, device: torch.device) -> nn.Module:
     checkpoint = torch.load(weights_path, map_location=device)
-    model = build_classifier()
+    
+    model_name = checkpoint.get("model_name", checkpoint.get("backbone", "resnet18"))
+    print(f"[INFO] Detected classifier architecture: {model_name}")
+    
+    model = build_classifier(model_name=model_name)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
     model.load_state_dict(state_dict)
     model.to(device)
@@ -85,6 +104,18 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help=f"Where to write annotated results (default: {DEFAULT_OUTPUT}).",
     )
+    parser.add_argument(
+        "--det-weights",
+        type=Path,
+        default=DEFAULT_DET_WEIGHTS,
+        help=f"Path to detection weights (default: {DEFAULT_DET_WEIGHTS}).",
+    )
+    parser.add_argument(
+        "--cls-weights",
+        type=Path,
+        default=DEFAULT_CLS_WEIGHTS,
+        help=f"Path to classification weights (default: {DEFAULT_CLS_WEIGHTS}).",
+    )
     return parser.parse_args()
 
 
@@ -93,23 +124,29 @@ def main() -> None:
     image_path = args.image.resolve()
     output_dir = args.output_dir.resolve()
     overlay_dir = output_dir
+    
+    det_weights = args.det_weights.resolve()
+    cls_weights = args.cls_weights.resolve()
 
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
     if not is_supported_image(image_path):
         raise FileNotFoundError(f"Unsupported image type: {image_path.suffix}")
-    if not DEFAULT_DET_WEIGHTS.exists():
-        raise FileNotFoundError(f"Detection checkpoint not found: {DEFAULT_DET_WEIGHTS}")
-    if not DEFAULT_CLS_WEIGHTS.exists():
-        raise FileNotFoundError(f"Classifier checkpoint not found: {DEFAULT_CLS_WEIGHTS}")
+    if not det_weights.exists():
+        raise FileNotFoundError(f"Detection checkpoint not found: {det_weights}")
+    if not cls_weights.exists():
+        raise FileNotFoundError(f"Classifier checkpoint not found: {cls_weights}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     overlay_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[INFO] Processing image {image_path.name}")
-    det_model = YOLO(str(DEFAULT_DET_WEIGHTS))
+    print(f"[INFO] Using detection weights: {det_weights.name}")
+    print(f"[INFO] Using classification weights: {cls_weights.name}")
+    
+    det_model = YOLO(str(det_weights))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    cls_model = load_classifier(DEFAULT_CLS_WEIGHTS, device)
+    cls_model = load_classifier(cls_weights, device)
     transform = build_transform()
     font = ImageFont.load_default()
 

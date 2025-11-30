@@ -10,24 +10,40 @@ from PIL import Image
 from torchvision import models, transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_WEIGHTS = PROJECT_ROOT / "models/trained/trained_resnet18.pth"
+DEFAULT_WEIGHT_PATH = PROJECT_ROOT / "models/trained/trained_resnet18.pth"
+DEFAULT_SAVE_DIR = PROJECT_ROOT / "runs/classification"
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
 CLASS_LABELS = ["normal", "spoiled"]
 
+ARCH_CONFIG = {
+    "resnet18": {
+        "builder": models.resnet18,
+        "hidden_features": 256,
+    },
+    "resnet50": {
+        "builder": models.resnet50,
+        "hidden_features": 512,
+    },
+}
 
-def build_model(num_classes: int = 2) -> nn.Module:
-    model = models.resnet18(weights=None)
-    for param in model.parameters():
-        param.requires_grad = False
-    for param in model.layer4.parameters():
-        param.requires_grad = True
+def build_model(model_name: str = "resnet18", num_classes: int = 2) -> nn.Module:
+    if model_name not in ARCH_CONFIG:
+        raise ValueError(f"Unsupported model '{model_name}'. Supported: {list(ARCH_CONFIG.keys())}")
+
+    config = ARCH_CONFIG[model_name]
+    # In inference/production, we don't strictly need 'pretrained=True' if we are loading weights,
+    # but creating the structure is necessary.
+    model = config["builder"](weights=None)
+
+    # We reconstruct the same modification to fc layer as during training
     num_features = model.fc.in_features
+    hidden = config["hidden_features"]
     model.fc = nn.Sequential(
         nn.Dropout(0.5),
-        nn.Linear(num_features, 256),
+        nn.Linear(num_features, hidden),
         nn.ReLU(),
         nn.Dropout(0.3),
-        nn.Linear(256, num_classes),
+        nn.Linear(hidden, num_classes),
     )
     return model
 
@@ -38,9 +54,14 @@ def list_images(image_dir: Path) -> Sequence[Path]:
     )
 
 
-def load_checkpoint(weights_path: Path, device: torch.device) -> nn.Module:
-    checkpoint = torch.load(weights_path, map_location=device)
-    model = build_model()
+def load_checkpoint(model_path: Path, device: torch.device) -> nn.Module:
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    model_name = checkpoint.get("model_name", checkpoint.get("backbone", "resnet18"))
+    
+    print(f"[INFO] Detected model architecture: {model_name}")
+    
+    model = build_model(model_name=model_name)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
     model.load_state_dict(state_dict)
     model.to(device)
@@ -50,10 +71,10 @@ def load_checkpoint(weights_path: Path, device: torch.device) -> nn.Module:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the trained ResNet18 pepper leaf classifier on a directory of images."
+        description="Run the trained pepper leaf classifier on a directory of images."
     )
     parser.add_argument(
-        "--input-dir",
+        "--source",
         type=Path,
         required=True,
         help="Directory containing leaf crops to classify.",
@@ -61,14 +82,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--weights",
         type=Path,
-        default=DEFAULT_WEIGHTS,
-        help=f"Path to the trained checkpoint (default: {DEFAULT_WEIGHTS}).",
+        default=DEFAULT_WEIGHT_PATH,
+        help=f"Path to the trained model checkpoint (default: {DEFAULT_WEIGHT_PATH}).",
     )
     parser.add_argument(
-        "--device",
-        type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Torch device to use (default: auto-detect).",
+        "--save-dir",
+        type=Path,
+        default=DEFAULT_SAVE_DIR,
+        help=f"Directory to save classification results (default: {DEFAULT_SAVE_DIR}).",
     )
     return parser.parse_args()
 
@@ -85,23 +106,29 @@ def build_transform() -> transforms.Compose:
 
 def main() -> None:
     args = parse_args()
-    input_dir = args.input_dir.resolve()
-    weights_path = args.weights.resolve()
-    device = torch.device(args.device)
+    source_dir = args.source.resolve()
+    model_path = args.model.resolve()
+    save_dir = args.save_dir.resolve()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Auto-detect device
 
-    if not input_dir.exists():
-        raise FileNotFoundError(f"Input directory {input_dir} does not exist.")
-    if not weights_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {weights_path}")
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Source directory {source_dir} does not exist.")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model checkpoint not found: {model_path}")
 
-    images = list_images(input_dir)
+    images = list_images(source_dir)
     if not images:
-        raise FileNotFoundError(f"No supported images found under {input_dir}")
+        raise FileNotFoundError(f"No supported images found under {source_dir}")
 
-    model = load_checkpoint(weights_path, device)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    results_file = save_dir / "classification_results.txt"
+
+    model = load_checkpoint(model_path, device)
     transform = build_transform()
 
-    print(f"[INFO] Running classification on {len(images)} images using {weights_path.name}")
+    print(f"[INFO] Running classification on {len(images)} images using {model_path.name}")
+    
+    classification_outputs = []
     with torch.inference_mode():
         for img_path in images:
             image = Image.open(img_path).convert("RGB")
@@ -110,7 +137,15 @@ def main() -> None:
             probs = torch.softmax(logits, dim=1)[0]
             conf, pred_idx = torch.max(probs, dim=0)
             label = CLASS_LABELS[pred_idx.item()]
-            print(f"{img_path.name}: {label} ({conf.item():.2%})")
+            
+            output_line = f"{img_path.name}: {label} ({conf.item():.2%})"
+            print(output_line)
+            classification_outputs.append(output_line)
+            
+    with open(results_file, "w") as f:
+        for line in classification_outputs:
+            f.write(line + "\n")
+    print(f"[INFO] Classification results saved to {results_file}")
 
 
 if __name__ == "__main__":
