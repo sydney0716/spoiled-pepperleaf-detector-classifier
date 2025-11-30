@@ -1,0 +1,29 @@
+# Core Python
+__pycache__/
+*.py[cod]
+*pyc
+
+# System & IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Virtual Env
+.env
+.venv/
+venv/
+
+# Data & Outputs
+data/
+results/
+runs/
+wandb/
+logs/
+.splits/
+
+
+# Large Model Artifacts
+# Ignore all large model files to keep repo clean
+*.pt
+*.pth
+pretrained/
