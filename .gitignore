@@ -26,4 +26,3 @@ logs/
 # Ignore all large model files to keep repo clean
 *.pt
 *.pth
-pretrained/
