@@ -14,3 +14,7 @@ onnx==1.17.0
 onnx2tf==1.28.2
 tensorflow==2.20.0
 groundingdino-py
+paho-mqtt
+redis
+Flask
+tflite-runtime

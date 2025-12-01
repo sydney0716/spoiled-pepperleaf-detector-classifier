@@ -19,7 +19,9 @@ Please unzip the contents into the `data/` directory following the structure des
 - `scripts/`: Main inference code for Raspberry Pi, including communication modules.
 - `models/`: Stores the final deployed TFLite models.
 - `assets/`: Demo images and performance graphs for documentation.
-
+- `deploy/`: Source code for edge devices.
+  - `raspberry_pi/`: Main inference application (Python).
+  - `esp32/`: Firmware for sensors/communication (C++).
 ## Setup
 
 ### 1. Environment
