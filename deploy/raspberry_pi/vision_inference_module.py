@@ -3,8 +3,8 @@ import numpy as np
 from pathlib import Path
 import tflite_runtime.interpreter as tflite
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-MODEL_DIR = PROJECT_ROOT / "weights/exported"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = PROJECT_ROOT / "models/exported"
 
 def load_models():
     """
@@ -16,12 +16,12 @@ def load_models():
             - Resnet interpreter and its input/output details
             - Label list
     """
-    detect_interpreter = tflite.Interpreter(model_path = MODEL_DIR / "best_yolov8n.tflite")
+    detect_interpreter = tflite.Interpreter(model_path = MODEL_DIR / "trained_yolov8n.tflite")
     detect_interpreter.allocate_tensors()
     detect_input_details = detect_interpreter.get_input_details()
     detect_output_details = detect_interpreter.get_output_details()
 
-    class_interpreter = tflite.Interpreter(model_path = MODEL_DIR / "leaf_classifier_resnet18_resnet18.tflite")
+    class_interpreter = tflite.Interpreter(model_path = MODEL_DIR / "trained_resnet18.tflite")
     class_interpreter.allocate_tensors()
     class_input_details = class_interpreter.get_input_details()
     class_output_details = class_interpreter.get_output_details()
